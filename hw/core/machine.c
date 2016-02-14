@@ -382,6 +382,8 @@ static void machine_initfn(Object *obj)
     ms->kvm_shadow_mem = -1;
     ms->dump_guest_core = true;
     ms->mem_merge = true;
+    /* Disable interrupt remapping by default. */
+    ms->iommu_intr = false;
 
     object_property_add_str(obj, "accel",
                             machine_get_accel, machine_set_accel, NULL);

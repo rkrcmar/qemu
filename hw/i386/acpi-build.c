@@ -2575,16 +2575,22 @@ build_mcfg_q35(GArray *table_data, GArray *linker, AcpiMcfgInfo *info)
 }
 
 static void
-build_dmar_q35(GArray *table_data, GArray *linker)
+build_dmar_q35(MachineState *ms, GArray *table_data, GArray *linker)
 {
     int dmar_start = table_data->len;
 
     AcpiTableDmar *dmar;
     AcpiDmarHardwareUnit *drhd;
+    uint8_t dmar_flags = 0;
+
+    if (ms->iommu_intr) {
+        /* enable INTR for the IOMMU device */
+        dmar_flags |= DMAR_REPORT_F_INTR;
+    }
 
     dmar = acpi_data_push(table_data, sizeof(*dmar));
     dmar->host_address_width = VTD_HOST_ADDRESS_WIDTH - 1;
-    dmar->flags = 0;    /* No intr_remap for now */
+    dmar->flags = dmar_flags;
 
     /* DMAR Remapping Hardware Unit Definition structure */
     drhd = acpi_data_push(table_data, sizeof(*drhd));
@@ -2745,7 +2751,7 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
     }
     if (acpi_has_iommu()) {
         acpi_add_table(table_offsets, tables_blob);
-        build_dmar_q35(tables_blob, tables->linker);
+        build_dmar_q35(MACHINE(pcms), tables_blob, tables->linker);
     }
     if (pcms->acpi_nvdimm_state.is_enabled) {
         nvdimm_build_acpi(table_offsets, tables_blob, tables->linker);
