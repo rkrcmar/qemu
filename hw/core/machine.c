@@ -397,6 +397,8 @@ static void machine_initfn(Object *obj)
     ms->dump_guest_core = true;
     ms->mem_merge = true;
     ms->enable_graphics = true;
+    /* Disable interrupt remapping by default. */
+    ms->iommu_intr = false;
 
     object_property_add_str(obj, "accel",
                             machine_get_accel, machine_set_accel, NULL);
