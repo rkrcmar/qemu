@@ -300,6 +300,20 @@ static void machine_set_iommu(Object *obj, bool value, Error **errp)
     ms->iommu = value;
 }
 
+static bool machine_get_intremap(Object *obj, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+
+    return ms->iommu_intr;
+}
+
+static void machine_set_intremap(Object *obj, bool value, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+
+    ms->iommu_intr = value;
+}
+
 static void machine_set_suppress_vmdesc(Object *obj, bool value, Error **errp)
 {
     MachineState *ms = MACHINE(obj);
@@ -479,6 +493,12 @@ static void machine_initfn(Object *obj)
                              machine_set_iommu, NULL);
     object_property_set_description(obj, "iommu",
                                     "Set on/off to enable/disable Intel IOMMU (VT-d)",
+                                    NULL);
+    object_property_add_bool(obj, "intremap", machine_get_intremap,
+                             machine_set_intremap, NULL);
+    object_property_set_description(obj, "intremap",
+                                    "Set on/off to enable/disable IOMMU"
+                                    " interrupt remapping",
                                     NULL);
     object_property_add_bool(obj, "suppress-vmdesc",
                              machine_get_suppress_vmdesc,
