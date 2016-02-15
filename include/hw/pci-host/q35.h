@@ -175,4 +175,13 @@ typedef struct Q35PCIHost {
 
 uint64_t mch_mcfg_base(void);
 
+/*
+ * Arbitary but unique BNF number for IOAPIC device. This is only
+ * used when interrupt remapping is enabled.
+ *
+ * TODO: make sure there would have no conflict with real PCI bus
+ */
+#define Q35_PSEUDO_BUS_PLATFORM         (0xff)
+#define Q35_PSEUDO_DEVFN_IOAPIC         (0x00)
+
 #endif /* HW_Q35_H */
