@@ -24,6 +24,7 @@
 #include "exec/address-spaces.h"
 #include "intel_iommu_internal.h"
 #include "hw/pci/pci.h"
+#include "hw/boards.h"
 
 /*#define DEBUG_INTEL_IOMMU*/
 #ifdef DEBUG_INTEL_IOMMU
@@ -1941,6 +1942,8 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
  */
 static void vtd_init(IntelIOMMUState *s)
 {
+    MachineState *ms = MACHINE(qdev_get_machine());
+
     memset(s->csr, 0, DMAR_REG_SIZE);
     memset(s->wmask, 0, DMAR_REG_SIZE);
     memset(s->w1cmask, 0, DMAR_REG_SIZE);
@@ -1960,6 +1963,10 @@ static void vtd_init(IntelIOMMUState *s)
     s->cap = VTD_CAP_FRO | VTD_CAP_NFR | VTD_CAP_ND | VTD_CAP_MGAW |
              VTD_CAP_SAGAW | VTD_CAP_MAMV | VTD_CAP_PSI | VTD_CAP_SLLPS;
     s->ecap = VTD_ECAP_QI | VTD_ECAP_IRO;
+
+    if (ms->iommu_intr) {
+        s->ecap |= VTD_ECAP_IR;
+    }
 
     vtd_reset_context_cache(s);
     vtd_reset_iotlb(s);
