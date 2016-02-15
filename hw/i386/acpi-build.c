@@ -77,6 +77,9 @@
 #define ACPI_BUILD_DPRINTF(fmt, ...)
 #endif
 
+/* Default IOAPIC ID */
+#define ACPI_BUILD_IOAPIC_ID 0x0
+
 typedef struct AcpiMcfgInfo {
     uint64_t mcfg_base;
     uint32_t mcfg_size;
@@ -375,7 +378,6 @@ build_madt(GArray *table_data, GArray *linker, PCMachineState *pcms)
     io_apic = acpi_data_push(table_data, sizeof *io_apic);
     io_apic->type = ACPI_APIC_IO;
     io_apic->length = sizeof(*io_apic);
-#define ACPI_BUILD_IOAPIC_ID 0x0
     io_apic->io_apic_id = ACPI_BUILD_IOAPIC_ID;
     io_apic->address = cpu_to_le32(IO_APIC_DEFAULT_ADDRESS);
     io_apic->interrupt = cpu_to_le32(0);
@@ -2582,6 +2584,9 @@ build_dmar_q35(MachineState *ms, GArray *table_data, GArray *linker)
     AcpiTableDmar *dmar;
     AcpiDmarHardwareUnit *drhd;
     uint8_t dmar_flags = 0;
+    AcpiDmarDeviceScope *scope = NULL;
+    /* Root complex IOAPIC use one path[0] only */
+    uint16_t scope_size = sizeof(*scope) + sizeof(uint16_t);
 
     if (ms->iommu_intr) {
         /* enable INTR for the IOMMU device */
@@ -2595,10 +2600,18 @@ build_dmar_q35(MachineState *ms, GArray *table_data, GArray *linker)
     /* DMAR Remapping Hardware Unit Definition structure */
     drhd = acpi_data_push(table_data, sizeof(*drhd));
     drhd->type = cpu_to_le16(ACPI_DMAR_TYPE_HARDWARE_UNIT);
-    drhd->length = cpu_to_le16(sizeof(*drhd));   /* No device scope now */
+    drhd->length = cpu_to_le16(sizeof(*drhd) + scope_size);
     drhd->flags = ACPI_DMAR_INCLUDE_PCI_ALL;
     drhd->pci_segment = cpu_to_le16(0);
     drhd->address = cpu_to_le64(Q35_HOST_BRIDGE_IOMMU_ADDR);
+
+    /* Scope definition for the root-complex IOAPIC */
+    scope = acpi_data_push(table_data, scope_size);
+    scope->entry_type = cpu_to_le16(ACPI_DMAR_DEV_SCOPE_TYPE_IOAPIC);
+    scope->length = scope_size;
+    scope->enumeration_id = cpu_to_le16(ACPI_BUILD_IOAPIC_ID);
+    scope->bus = cpu_to_le16(Q35_PSEUDO_BUS_PLATFORM);
+    scope->path[0] = cpu_to_le16(Q35_PSEUDO_DEVFN_IOAPIC);
 
     build_header(linker, table_data, (void *)(table_data->data + dmar_start),
                  "DMAR", table_data->len - dmar_start, 1, NULL, NULL);
