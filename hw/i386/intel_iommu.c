@@ -2001,6 +2001,19 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
     return vtd_dev_as;
 }
 
+IntelIOMMUState *vtd_iommu_get(void)
+{
+    bool ambiguous = false;
+    Object *intel_iommu = NULL;
+
+    intel_iommu = object_resolve_path_type("", TYPE_INTEL_IOMMU_DEVICE,
+                                 &ambiguous);
+    if (ambiguous)
+        intel_iommu = NULL;
+
+    return (IntelIOMMUState *)intel_iommu;
+}
+
 /* Do the initialization. It will also be called when reset, so pay
  * attention when adding new initialization stuff.
  */

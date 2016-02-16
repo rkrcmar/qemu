@@ -196,5 +196,7 @@ struct IntelIOMMUState {
  * create a new one if none exists
  */
 VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn);
+/* Get default IOMMU object */
+IntelIOMMUState *vtd_iommu_get(void);
 
 #endif

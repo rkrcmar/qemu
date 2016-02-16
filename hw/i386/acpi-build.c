@@ -2677,12 +2677,7 @@ static bool acpi_get_mcfg(AcpiMcfgInfo *mcfg)
 
 static bool acpi_has_iommu(void)
 {
-    bool ambiguous;
-    Object *intel_iommu;
-
-    intel_iommu = object_resolve_path_type("", TYPE_INTEL_IOMMU_DEVICE,
-                                           &ambiguous);
-    return intel_iommu && !ambiguous;
+    return !!vtd_iommu_get();
 }
 
 static
