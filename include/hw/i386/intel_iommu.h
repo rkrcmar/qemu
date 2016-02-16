@@ -52,6 +52,9 @@ typedef struct IntelIOMMUState IntelIOMMUState;
 typedef struct VTDAddressSpace VTDAddressSpace;
 typedef struct VTDIOTLBEntry VTDIOTLBEntry;
 typedef struct VTDBus VTDBus;
+typedef union VTD_IRTE VTD_IRTE;
+typedef union VTD_IR_IOAPICEntry VTD_IR_IOAPICEntry;
+typedef union VTD_IR_MSIAddress VTD_IR_MSIAddress;
 
 /* Context-Entry */
 struct VTDContextEntry {
@@ -89,6 +92,63 @@ struct VTDIOTLBEntry {
     bool read_flags;
     bool write_flags;
 };
+
+/* Interrupt Remapping Table Entry Definition */
+union VTD_IRTE {
+    struct {
+        uint8_t present:1;          /* Whether entry present/available */
+        uint8_t fault_disable:1;    /* Fault Processing Disable */
+        uint8_t dest_mode:1;        /* Destination Mode */
+        uint8_t redir_hint:1;       /* Redirection Hint */
+        uint8_t trigger_mode:1;     /* Trigger Mode */
+        uint8_t delivery_mode:3;    /* Delivery Mode */
+        uint8_t __avail:4;          /* Available spaces for software */
+        uint8_t __reserved_0:3;     /* Reserved 0 */
+        uint8_t irte_mode:1;        /* IRTE Mode */
+        uint8_t vector:8;           /* Interrupt Vector */
+        uint8_t __reserved_1:8;     /* Reserved 1 */
+        uint32_t dest_id:32;        /* Destination ID */
+        uint16_t source_id:16;      /* Source-ID */
+        uint8_t sid_q:2;            /* Source-ID Qualifier */
+        uint8_t sid_vtype:2;        /* Source-ID Validation Type */
+        uint64_t __reserved_2:44;   /* Reserved 2 */
+    } QEMU_PACKED;
+    uint64_t data[2];
+};
+
+/* Programming format for IOAPIC table entries */
+union VTD_IR_IOAPICEntry {
+    struct {
+        uint8_t vector:8;           /* Vector */
+        uint8_t __zeros:3;          /* Reserved (all zero) */
+        uint8_t index_h:1;          /* Interrupt Index bit 15 */
+        uint8_t status:1;           /* Deliver Status */
+        uint8_t polarity:1;         /* Interrupt Polarity */
+        uint8_t remote_irr:1;       /* Remote IRR */
+        uint8_t trigger_mode:1;     /* Trigger Mode */
+        uint8_t mask:1;             /* Mask */
+        uint32_t __reserved:31;     /* Reserved (should all zero) */
+        uint8_t int_mode:1;         /* Interrupt Format */
+        uint16_t index_l:15;        /* Interrupt Index bits 14-0 */
+    } QEMU_PACKED;
+    uint64_t data;
+};
+
+/* Programming format for MSI/MSI-X addresses */
+union VTD_IR_MSIAddress {
+    struct {
+        uint8_t __not_care:2;
+        uint8_t index_h:1;          /* Interrupt index bit 15 */
+        uint8_t sub_valid:1;        /* SHV: Sub-Handle Valid bit */
+        uint8_t int_mode:1;         /* Interrupt format */
+        uint16_t index_l:15;        /* Interrupt index bit 14-0 */
+        uint16_t __head:12;         /* Should always be: 0x0fee */
+    } QEMU_PACKED;
+    uint32_t data;
+};
+
+/* When IR is enabled, all MSI/MSI-X data bits should be zero */
+#define VTD_IR_MSI_DATA          (0)
 
 /* The iommu (DMAR) device state struct */
 struct IntelIOMMUState {
