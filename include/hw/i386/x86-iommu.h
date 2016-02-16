@@ -30,6 +30,9 @@
 #define  X86_IOMMU_GET_CLASS(obj) \
     OBJECT_GET_CLASS(X86IOMMUClass, obj, TYPE_X86_IOMMU_DEVICE)
 
+#define X86_IOMMU_PCI_DEVFN_MAX           256
+#define X86_IOMMU_SID_INVALID             (0xffff)
+
 typedef struct X86IOMMUState X86IOMMUState;
 typedef struct X86IOMMUClass X86IOMMUClass;
 
@@ -42,5 +45,11 @@ struct X86IOMMUClass {
 struct X86IOMMUState {
     SysBusDevice busdev;
 };
+
+/**
+ * x86_iommu_get_default - get default IOMMU device
+ * @return: pointer to default IOMMU device
+ */
+X86IOMMUState *x86_iommu_get_default(void);
 
 #endif

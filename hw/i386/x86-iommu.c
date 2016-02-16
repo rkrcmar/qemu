@@ -22,12 +22,28 @@
 #include "hw/boards.h"
 #include "hw/i386/x86-iommu.h"
 
+/* Default X86 IOMMU device */
+static X86IOMMUState *x86_iommu_default = NULL;
+
+static void x86_iommu_set_default(X86IOMMUState *x86_iommu)
+{
+    assert(x86_iommu);
+    assert(x86_iommu_default == NULL);
+    x86_iommu_default = x86_iommu;
+}
+
+X86IOMMUState *x86_iommu_get_default(void)
+{
+    return x86_iommu_default;
+}
+
 static void x86_iommu_realize(DeviceState *dev, Error **errp)
 {
     X86IOMMUClass *x86_class = X86_IOMMU_GET_CLASS(dev);
     if (x86_class->realize) {
         x86_class->realize(dev, errp);
     }
+    x86_iommu_set_default(X86_IOMMU_DEVICE(dev));
 }
 
 static void x86_iommu_class_init(ObjectClass *klass, void *data)

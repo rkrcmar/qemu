@@ -25,6 +25,7 @@
 #include "intel_iommu_internal.h"
 #include "hw/pci/pci.h"
 #include "hw/boards.h"
+#include "hw/i386/x86-iommu.h"
 
 /*#define DEBUG_INTEL_IOMMU*/
 #ifdef DEBUG_INTEL_IOMMU
@@ -191,7 +192,7 @@ static void vtd_reset_context_cache(IntelIOMMUState *s)
 
     VTD_DPRINTF(CACHE, "global context_cache_gen=1");
     while (g_hash_table_iter_next (&bus_it, NULL, (void**)&vtd_bus)) {
-        for (devfn_it = 0; devfn_it < VTD_PCI_DEVFN_MAX; ++devfn_it) {
+        for (devfn_it = 0; devfn_it < X86_IOMMU_PCI_DEVFN_MAX; ++devfn_it) {
             vtd_as = vtd_bus->dev_as[devfn_it];
             if (!vtd_as) {
                 continue;
@@ -976,7 +977,7 @@ static void vtd_context_device_invalidate(IntelIOMMUState *s,
     vtd_bus = vtd_find_as_from_bus_num(s, VTD_SID_TO_BUS(source_id));
     if (vtd_bus) {
         devfn = VTD_SID_TO_DEVFN(source_id);
-        for (devfn_it = 0; devfn_it < VTD_PCI_DEVFN_MAX; ++devfn_it) {
+        for (devfn_it = 0; devfn_it < X86_IOMMU_PCI_DEVFN_MAX; ++devfn_it) {
             vtd_as = vtd_bus->dev_as[devfn_it];
             if (vtd_as && ((devfn_it & mask) == (devfn & mask))) {
                 VTD_DPRINTF(INV, "invalidate context-cahce of devfn 0x%"PRIx16,
@@ -1978,7 +1979,8 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
 
     if (!vtd_bus) {
         /* No corresponding free() */
-        vtd_bus = g_malloc0(sizeof(VTDBus) + sizeof(VTDAddressSpace *) * VTD_PCI_DEVFN_MAX);
+        vtd_bus = g_malloc0(sizeof(VTDBus) + sizeof(VTDAddressSpace *) * \
+                            X86_IOMMU_PCI_DEVFN_MAX);
         vtd_bus->bus = bus;
         key = (uintptr_t)bus;
         g_hash_table_insert(s->vtd_as_by_busptr, &key, vtd_bus);
