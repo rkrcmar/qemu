@@ -154,6 +154,7 @@ struct MachineState {
     bool iommu;
     bool suppress_vmdesc;
     bool enforce_config_section;
+    bool cpu_hotplug;
 
     ram_addr_t ram_size;
     ram_addr_t maxram_size;
