@@ -306,6 +306,21 @@ static void ich9_pm_set_memory_hotplug_support(Object *obj, bool value,
     s->pm.acpi_memory_hotplug.is_enabled = value;
 }
 
+static bool ich9_pm_get_cpu_hotplug_legacy(Object *obj, Error **errp)
+{
+    ICH9LPCState *s = ICH9_LPC_DEVICE(obj);
+
+    return s->pm.cpu_hotplug_legacy;
+}
+
+static void ich9_pm_set_cpu_hotplug_legacy(Object *obj, bool value,
+                                           Error **errp)
+{
+    ICH9LPCState *s = ICH9_LPC_DEVICE(obj);
+
+    s->pm.cpu_hotplug_legacy = value;
+}
+
 static void ich9_pm_get_disable_s3(Object *obj, Visitor *v, const char *name,
                                    void *opaque, Error **errp)
 {
@@ -411,6 +426,10 @@ void ich9_pm_add_properties(Object *obj, ICH9LPCPMRegs *pm, Error **errp)
     object_property_add_bool(obj, "memory-hotplug-support",
                              ich9_pm_get_memory_hotplug_support,
                              ich9_pm_set_memory_hotplug_support,
+                             NULL);
+    object_property_add_bool(obj, "cpu-hotplug-legacy",
+                             ich9_pm_get_cpu_hotplug_legacy,
+                             ich9_pm_set_cpu_hotplug_legacy,
                              NULL);
     object_property_add(obj, ACPI_PM_PROP_S3_DISABLED, "uint8",
                         ich9_pm_get_disable_s3,

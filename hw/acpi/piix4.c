@@ -85,6 +85,7 @@ typedef struct PIIX4PMState {
     uint8_t disable_s4;
     uint8_t s4_val;
 
+    bool cpu_hotplug_legacy;
     AcpiCpuHotplug gpe_cpu;
 
     MemHotplugState acpi_memory_hotplug;
@@ -594,6 +595,8 @@ static Property piix4_pm_properties[] = {
                      use_acpi_pci_hotplug, true),
     DEFINE_PROP_BOOL("memory-hotplug-support", PIIX4PMState,
                      acpi_memory_hotplug.is_enabled, true),
+    DEFINE_PROP_BOOL("cpu-hotplug-legacy", PIIX4PMState,
+                     cpu_hotplug_legacy, false),
     DEFINE_PROP_END_OF_LIST(),
 };
 
