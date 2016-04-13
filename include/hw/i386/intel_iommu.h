@@ -23,6 +23,8 @@
 #define INTEL_IOMMU_H
 #include "hw/qdev.h"
 #include "sysemu/dma.h"
+#include "hw/i386/ioapic.h"
+#include "hw/pci/msi.h"
 
 #define TYPE_INTEL_IOMMU_DEVICE "intel-iommu"
 #define INTEL_IOMMU_DEVICE(obj) \
@@ -46,6 +48,10 @@
 
 #define DMAR_REPORT_F_INTR          (1)
 
+#define  VTD_MSI_ADDR_HI_MASK        (0xffffffff00000000ULL)
+#define  VTD_MSI_ADDR_HI_SHIFT       (32)
+#define  VTD_MSI_ADDR_LO_MASK        (0x00000000ffffffffULL)
+
 typedef struct VTDContextEntry VTDContextEntry;
 typedef struct VTDContextCacheEntry VTDContextCacheEntry;
 typedef struct IntelIOMMUState IntelIOMMUState;
@@ -55,6 +61,8 @@ typedef struct VTDBus VTDBus;
 typedef union VTD_IRTE VTD_IRTE;
 typedef union VTD_IR_IOAPICEntry VTD_IR_IOAPICEntry;
 typedef union VTD_IR_MSIAddress VTD_IR_MSIAddress;
+typedef struct VTDIrq VTDIrq;
+typedef struct VTD_MSIMessage VTD_MSIMessage;
 
 /* Context-Entry */
 struct VTDContextEntry {
@@ -75,6 +83,7 @@ struct VTDAddressSpace {
     uint8_t devfn;
     AddressSpace as;
     MemoryRegion iommu;
+    MemoryRegion iommu_ir;      /* Interrupt region: 0xfeeXXXXX */
     IntelIOMMUState *iommu_state;
     VTDContextCacheEntry context_cache_entry;
 };
@@ -116,6 +125,9 @@ union VTD_IRTE {
     uint64_t data[2];
 };
 
+#define VTD_IR_INT_FORMAT_COMPAT     (0) /* Compatible Interrupt */
+#define VTD_IR_INT_FORMAT_REMAP      (1) /* Remappable Interrupt */
+
 /* Programming format for IOAPIC table entries */
 union VTD_IR_IOAPICEntry {
     struct {
@@ -145,6 +157,46 @@ union VTD_IR_MSIAddress {
         uint16_t __head:12;         /* Should always be: 0x0fee */
     } QEMU_PACKED;
     uint32_t data;
+};
+
+/* Generic IRQ entry information */
+struct VTDIrq {
+    /* Used by both IOAPIC/MSI interrupt remapping */
+    uint8_t trigger_mode;
+    uint8_t vector;
+    uint8_t delivery_mode;
+    uint32_t dest;
+    uint8_t dest_mode;
+
+    /* only used by MSI interrupt remapping */
+    uint8_t redir_hint;
+    uint8_t msi_addr_last_bits;
+};
+
+struct VTD_MSIMessage {
+    union {
+        struct {
+            uint16_t __not_used:2;
+            uint16_t dest_mode:1;
+            uint16_t redir_hint:1;
+            uint16_t __reserved:8;
+            uint16_t dest:8;
+            uint16_t __addr_head:12; /* 0xfee */
+            uint32_t __addr_hi:32;
+        } QEMU_PACKED;
+        uint64_t msi_addr;
+    };
+    union {
+        struct {
+            uint16_t vector:8;
+            uint16_t delivery_mode:3;
+            uint16_t __resved:3;
+            uint16_t level:1;
+            uint16_t trigger_mode:1;
+            uint16_t __resved1:16;
+        } QEMU_PACKED;
+        uint32_t msi_data;
+    };
 };
 
 /* When IR is enabled, all MSI/MSI-X data bits should be zero */
