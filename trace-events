@@ -1909,3 +1909,12 @@ aspeed_vic_update_fiq(int flags) "Raising FIQ: %d"
 aspeed_vic_update_irq(int flags) "Raising IRQ: %d"
 aspeed_vic_read(uint64_t offset, unsigned size, uint32_t value) "From 0x%" PRIx64 " of size %u: 0x%" PRIx32
 aspeed_vic_write(uint64_t offset, unsigned size, uint32_t data) "To 0x%" PRIx64 " of size %u: 0x%" PRIx32
+
+# hw/acpi/cpu.c
+cpuhp_acpi_invalid_idx_selected(uint32_t idx) "0x%"PRIx32
+cpuhp_acpi_read_flags(uint32_t idx, uint8_t flags) "idx[0x%"PRIx32"] flags: 0x%"PRIx8
+cpuhp_acpi_clear_inserting_evt(uint32_t idx) "idx[0x%"PRIx32"]"
+cpuhp_acpi_clear_remove_evt(uint32_t idx) "idx[0x%"PRIx32"]"
+cpuhp_acpi_write_idx(uint32_t idx) "set active cpu idx: 0x%"PRIx32
+cpuhp_acpi_ejecting_invalid_cpu(uint32_t idx) "0x%"PRIx32
+cpuhp_acpi_ejecting_cpu(uint32_t idx) "0x%"PRIx32
