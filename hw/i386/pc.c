@@ -1063,6 +1063,9 @@ out:
     return cpu;
 }
 
+static void pc_machine_device_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                                DeviceState *dev, Error **errp);
+
 void pc_hot_add_cpu(const int64_t id, Error **errp)
 {
     X86CPU *cpu;
@@ -1076,6 +1079,11 @@ void pc_hot_add_cpu(const int64_t id, Error **errp)
     }
 
     if (cpu_exists(apic_id)) {
+        DeviceState *dev = DEVICE(cpu_exists(apic_id));
+        pc_machine_device_unplug_request_cb(
+            qdev_get_hotplug_handler(dev),
+            dev,
+            &local_err);
         error_setg(errp, "Unable to add CPU: %" PRIi64
                    ", it already exists", id);
         return;

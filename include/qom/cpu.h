@@ -629,7 +629,7 @@ CPUState *qemu_get_cpu(int index);
  *
  * Returns: %true - CPU is found, %false - CPU isn't found.
  */
-bool cpu_exists(int64_t id);
+CPUState *cpu_exists(int64_t id);
 
 /**
  * cpu_throttle_set:

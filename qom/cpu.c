@@ -29,7 +29,7 @@
 #include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 
-bool cpu_exists(int64_t id)
+CPUState *cpu_exists(int64_t id)
 {
     CPUState *cpu;
 
@@ -37,10 +37,10 @@ bool cpu_exists(int64_t id)
         CPUClass *cc = CPU_GET_CLASS(cpu);
 
         if (cc->get_arch_id(cpu) == id) {
-            return true;
+            return cpu;
         }
     }
-    return false;
+    return NULL;
 }
 
 CPUState *cpu_generic_init(const char *typename, const char *cpu_model)
