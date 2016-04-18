@@ -171,15 +171,16 @@ static void pc_q35_init(MachineState *machine)
     host_bus = phb->bus;
     pcms->bus = phb->bus;
     /* create ISA bus */
-    lpc = pci_create_simple_multifunction(host_bus, PCI_DEVFN(ICH9_LPC_DEV,
-                                          ICH9_LPC_FUNC), true,
-                                          TYPE_ICH9_LPC_DEVICE);
+    lpc = pci_create_multifunction(host_bus, PCI_DEVFN(ICH9_LPC_DEV,
+                                   ICH9_LPC_FUNC), true, TYPE_ICH9_LPC_DEVICE);
+    qdev_prop_set_bit(DEVICE(lpc), "cpu-hotplug", machine->cpu_hotplug);
 
     object_property_add_link(OBJECT(machine), PC_MACHINE_ACPI_DEVICE_PROP,
                              TYPE_HOTPLUG_HANDLER,
                              (Object **)&pcms->acpi_dev,
                              object_property_allow_set_link,
                              OBJ_PROP_LINK_UNREF_ON_RELEASE, &error_abort);
+    qdev_init_nofail(DEVICE(lpc));
     object_property_set_link(OBJECT(machine), OBJECT(lpc),
                              PC_MACHINE_ACPI_DEVICE_PROP, &error_abort);
 

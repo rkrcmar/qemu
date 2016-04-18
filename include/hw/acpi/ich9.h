@@ -23,6 +23,7 @@
 
 #include "hw/acpi/acpi.h"
 #include "hw/acpi/cpu_hotplug.h"
+#include "hw/acpi/cpu.h"
 #include "hw/acpi/memory_hotplug.h"
 #include "hw/acpi/acpi_dev_interface.h"
 #include "hw/acpi/tco.h"
@@ -49,7 +50,10 @@ typedef struct ICH9LPCPMRegs {
     Notifier powerdown_notifier;
 
     bool cpu_hotplug_legacy;
-    AcpiCpuHotplug gpe_cpu;
+    union {
+        AcpiCpuHotplug legacy; /* used for keeping legacy state */
+        CPUHotplugState state;
+    } cpuhp;
 
     MemHotplugState acpi_memory_hotplug;
 
