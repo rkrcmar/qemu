@@ -36,6 +36,7 @@
 #include "hw/i386/apic.h"
 #include "hw/i386/apic_internal.h"
 #include "hw/i386/apic-msidef.h"
+#include "hw/i386/intel_iommu.h"
 
 #include "exec/ioport.h"
 #include "standard-headers/asm-x86/hyperv.h"
@@ -43,6 +44,7 @@
 #include "hw/pci/msi.h"
 #include "migration/migration.h"
 #include "exec/memattrs.h"
+#include "trace.h"
 
 //#define DEBUG_KVM
 
@@ -3327,6 +3329,28 @@ int kvm_device_msix_deassign(KVMState *s, uint32_t dev_id)
 int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
                              uint64_t address, uint32_t data, PCIDevice *dev)
 {
+    IntelIOMMUState *iommu = vtd_iommu_get();
+
+    if (iommu) {
+        int ret;
+        MSIMessage src, dst;
+
+        src.address = route->u.msi.address_hi;
+        src.address <<= VTD_MSI_ADDR_HI_SHIFT;
+        src.address |= route->u.msi.address_lo;
+        src.data = route->u.msi.data;
+
+        ret = vtd_int_remap(iommu, &src, &dst);
+        if (ret) {
+            trace_kvm_x86_fixup_msi_error(route->gsi);
+            return 1;
+        }
+
+        route->u.msi.address_hi = dst.address >> VTD_MSI_ADDR_HI_SHIFT;
+        route->u.msi.address_lo = dst.address & VTD_MSI_ADDR_LO_MASK;
+        route->u.msi.data = dst.data;
+    }
+
     return 0;
 }
 

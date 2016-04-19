@@ -25,6 +25,7 @@
 #include "sysemu/dma.h"
 #include "hw/i386/ioapic.h"
 #include "hw/pci/msi.h"
+#include "hw/sysbus.h"
 
 #define TYPE_INTEL_IOMMU_DEVICE "intel-iommu"
 #define INTEL_IOMMU_DEVICE(obj) \
@@ -250,5 +251,6 @@ struct IntelIOMMUState {
 VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn);
 /* Get default IOMMU object */
 IntelIOMMUState *vtd_iommu_get(void);
+int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst);
 
 #endif
