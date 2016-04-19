@@ -1946,3 +1946,6 @@ gic_set_irq(int irq, int level, int cpumask, int target) "irq %d level %d cpumas
 gic_update_bestirq(int cpu, int irq, int prio, int priority_mask, int running_priority) "cpu %d irq %d priority %d cpu priority mask %d cpu running priority %d"
 gic_update_set_irq(int cpu, const char *name, int level) "cpu[%d]: %s = %d"
 gic_acknowledge_irq(int cpu, int irq) "cpu %d acknowledged irq %d"
+
+# target-i386/kvm.c
+kvm_x86_fixup_msi_error(uint32_t gsi) "VT-d failed to remap interrupt for GSI %" PRIu32

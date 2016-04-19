@@ -22,6 +22,7 @@
 
 #include "hw/sysbus.h"
 #include "exec/memory.h"
+#include "hw/pci/pci.h"
 
 #define  TYPE_X86_IOMMU_DEVICE  ("x86-iommu")
 #define  X86_IOMMU_DEVICE(obj) \
@@ -43,6 +44,9 @@ struct X86IOMMUClass {
     DeviceRealize realize;
     /* Find/Add IOMMU address space for specific PCI device */
     AddressSpace *(*find_add_as)(X86IOMMUState *s, PCIBus *bus, int devfn);
+    /* MSI-based interrupt remapping */
+    int (*int_remap)(X86IOMMUState *iommu, MSIMessage *src,
+                     MSIMessage *dst, uint16_t sid);
 };
 
 struct X86IOMMUState {
