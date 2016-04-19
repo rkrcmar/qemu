@@ -203,6 +203,24 @@ struct VTD_MSIMessage {
 /* When IR is enabled, all MSI/MSI-X data bits should be zero */
 #define VTD_IR_MSI_DATA          (0)
 
+/**
+ * vtd_iec_notify_fn - IEC (Interrupt Entry Cache) notifier hook,
+ *                     triggered when IR invalidation happens.
+ * @private: private data
+ * @global: whether this is a global IEC invalidation
+ * @index: IRTE index to invalidate (start from)
+ * @mask: invalidation mask
+ */
+typedef void (*vtd_iec_notify_fn)(void *private, bool global,
+                                  uint32_t index, uint32_t mask);
+
+struct VTD_IEC_Notifier {
+    vtd_iec_notify_fn iec_notify;
+    void *private;
+    QLIST_ENTRY(VTD_IEC_Notifier) list;
+};
+typedef struct VTD_IEC_Notifier VTD_IEC_Notifier;
+
 /* The iommu (DMAR) device state struct */
 struct IntelIOMMUState {
     SysBusDevice busdev;
@@ -243,6 +261,7 @@ struct IntelIOMMUState {
     bool intr_enabled;              /* Whether guest enabled IR */
     dma_addr_t intr_root;           /* Interrupt remapping table pointer */
     uint32_t intr_size;             /* Number of IR table entries */
+    QLIST_HEAD(, VTD_IEC_Notifier) iec_notifiers; /* IEC notify list */
 };
 
 /* Find the VTD Address space associated with the given bus pointer,
@@ -252,5 +271,8 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn);
 /* Get default IOMMU object */
 IntelIOMMUState *vtd_iommu_get(void);
 int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst);
+/* Register IEC invalidate notifier */
+void vtd_iec_register_notifier(IntelIOMMUState *s, vtd_iec_notify_fn fn,
+                               void *data);
 
 #endif
