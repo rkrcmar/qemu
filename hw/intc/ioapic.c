@@ -30,6 +30,7 @@
 #include "sysemu/kvm.h"
 #include "target-i386/cpu.h"
 #include "hw/i386/apic-msidef.h"
+#include "hw/i386/intel_iommu.h"
 
 //#define DEBUG_IOAPIC
 
@@ -197,6 +198,14 @@ static void ioapic_update_kvm_routes(IOAPICCommonState *s)
 #endif
 }
 
+static void ioapic_iec_notifier(void *private, bool global,
+                                uint32_t index, uint32_t mask)
+{
+    IOAPICCommonState *s = (IOAPICCommonState *)private;
+    /* For simplicity, we just update all the routes */
+    ioapic_update_kvm_routes(s);
+}
+
 void ioapic_eoi_broadcast(int vector)
 {
     IOAPICCommonState *s;
@@ -330,6 +339,18 @@ static void ioapic_realize(DeviceState *dev, Error **errp)
     qdev_init_gpio_in(dev, ioapic_set_irq, IOAPIC_NUM_PINS);
 
     ioapics[ioapic_no] = s;
+
+#ifdef CONFIG_KVM
+    if (kvm_irqchip_is_split()) {
+        IntelIOMMUState *iommu = vtd_iommu_get();
+        if (iommu) {
+            /* Register this IOAPIC with IOMMU IEC notifier, so that
+             * when there are IR invalidates, we can be notified to
+             * update kernel IR cache. */
+            vtd_iec_register_notifier(iommu, ioapic_iec_notifier, s);
+        }
+    }
+#endif
 }
 
 static void ioapic_class_init(ObjectClass *klass, void *data)
