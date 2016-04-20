@@ -1672,11 +1672,27 @@ static int pc_apic_cmp(const void *a, const void *b)
    return apic_a->arch_id - apic_b->arch_id;
 }
 
+static
+CPUArchId *pc_find_possible_cpu(PCMachineState *pcms, CPUState *cpu, int *idx)
+{
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+    CPUArchId apic_id, *found_cpu;
+
+    apic_id.arch_id = cc->get_arch_id(CPU(cpu));
+    found_cpu = bsearch(&apic_id, pcms->possible_cpus->cpus,
+        pcms->possible_cpus->len, sizeof(*pcms->possible_cpus->cpus),
+        pc_apic_cmp);
+    assert(found_cpu);
+    if (idx) {
+        *idx = found_cpu - pcms->possible_cpus->cpus;
+    }
+    return found_cpu;
+}
+
 static void pc_cpu_plug(HotplugHandler *hotplug_dev,
                         DeviceState *dev, Error **errp)
 {
-    CPUClass *cc = CPU_GET_CLASS(dev);
-    CPUArchId apic_id, *found_cpu;
+    CPUArchId *found_cpu;
     HotplugHandlerClass *hhc;
     Error *local_err = NULL;
     PCMachineState *pcms = PC_MACHINE(hotplug_dev);
@@ -1700,11 +1716,7 @@ static void pc_cpu_plug(HotplugHandler *hotplug_dev,
     /* increment the number of CPUs */
     rtc_set_memory(pcms->rtc, 0x5f, rtc_get_memory(pcms->rtc, 0x5f) + 1);
 
-    apic_id.arch_id = cc->get_arch_id(CPU(dev));
-    found_cpu = bsearch(&apic_id, pcms->possible_cpus->cpus,
-        pcms->possible_cpus->len, sizeof(*pcms->possible_cpus->cpus),
-        pc_apic_cmp);
-    assert(found_cpu);
+    found_cpu = pc_find_possible_cpu(pcms, CPU(dev), NULL);
     found_cpu->cpu = CPU(dev);
 out:
     error_propagate(errp, local_err);
@@ -1751,6 +1763,22 @@ static void pc_cpu_unplug_cb(HotplugHandler *hotplug_dev,
 
  out:
     error_propagate(errp, local_err);
+}
+
+static void pc_machine_device_pre_plug_cb(HotplugHandler *hotplug_dev,
+                                          DeviceState *dev, Error **errp)
+{
+    PCMachineState *pcms = PC_MACHINE(hotplug_dev);
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_CPU)) {
+        if (nb_numa_nodes) {
+            int idx;
+
+            pc_find_possible_cpu(pcms, CPU(dev), &idx);
+            object_property_set_int(OBJECT(dev), pcms->node_cpu[idx], "node",
+                                    errp);
+        }
+    }
 }
 
 static void pc_machine_device_plug_cb(HotplugHandler *hotplug_dev,
@@ -2033,6 +2061,7 @@ static void pc_machine_class_init(ObjectClass *oc, void *data)
     mc->hot_add_cpu = pc_hot_add_cpu;
     mc->max_cpus = 255;
     mc->reset = pc_machine_reset;
+    hc->pre_plug = pc_machine_device_pre_plug_cb;
     hc->plug = pc_machine_device_plug_cb;
     hc->unplug_request = pc_machine_device_unplug_request_cb;
     hc->unplug = pc_machine_device_unplug_cb;
