@@ -1104,7 +1104,7 @@ void pc_hot_add_cpu(const int64_t id, Error **errp)
 
 void pc_cpus_init(PCMachineState *pcms)
 {
-    int i;
+    int i, j;
     X86CPU *cpu = NULL;
     MachineState *machine = MACHINE(pcms);
 
@@ -1133,9 +1133,19 @@ void pc_cpus_init(PCMachineState *pcms)
 
     pcms->possible_cpus = g_malloc0(sizeof(CPUArchIdList) +
                                     sizeof(CPUArchId) * max_cpus);
+    pcms->node_cpu = g_malloc0(max_cpus * sizeof *pcms->node_cpu);
+
     for (i = 0; i < max_cpus; i++) {
         pcms->possible_cpus->cpus[i].arch_id = x86_cpu_apic_id_from_index(i);
         pcms->possible_cpus->len++;
+
+        for (j = 0; j < nb_numa_nodes; j++) {
+            if (test_bit(i, numa_info[j].node_cpu)) {
+                pcms->node_cpu[i] = j;
+                break;
+            }
+        }
+
         if (i < smp_cpus) {
             cpu = pc_new_cpu(machine->cpu_model, x86_cpu_apic_id_from_index(i),
                              &error_fatal);
@@ -1185,7 +1195,7 @@ void pc_machine_done(Notifier *notifier, void *data)
 
 void pc_guest_info_init(PCMachineState *pcms)
 {
-    int i, j;
+    int i;
 
     pcms->apic_xrupt_override = kvm_allows_irq0_override();
     pcms->numa_nodes = nb_numa_nodes;
@@ -1193,20 +1203,6 @@ void pc_guest_info_init(PCMachineState *pcms)
                                     sizeof *pcms->node_mem);
     for (i = 0; i < nb_numa_nodes; i++) {
         pcms->node_mem[i] = numa_info[i].node_mem;
-    }
-
-    pcms->node_cpu = g_malloc0(pcms->apic_id_limit *
-                                     sizeof *pcms->node_cpu);
-
-    for (i = 0; i < max_cpus; i++) {
-        unsigned int apic_id = x86_cpu_apic_id_from_index(i);
-        assert(apic_id < pcms->apic_id_limit);
-        for (j = 0; j < nb_numa_nodes; j++) {
-            if (test_bit(i, numa_info[j].node_cpu)) {
-                pcms->node_cpu[apic_id] = j;
-                break;
-            }
-        }
     }
 
     pcms->machine_done.notify = pc_machine_done;

@@ -2362,7 +2362,7 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
         core->type = ACPI_SRAT_PROCESSOR;
         core->length = sizeof(*core);
         core->local_apic_id = apic_id;
-        curnode = pcms->node_cpu[apic_id];
+        curnode = pcms->node_cpu[i];
         core->proximity_lo = curnode;
         memset(core->proximity_hi, 0, 3);
         core->local_sapic_eid = 0;
