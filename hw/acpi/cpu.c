@@ -7,6 +7,12 @@
 #define ACPI_CPU_HOTPLUG_REG_LEN 12
 #define ACPI_CPU_SELECTOR_OFFSET_WR 0
 #define ACPI_CPU_FLAGS_OFFSET_RW 4
+#define ACPI_CPU_CMD_OFFSET_WR 5
+#define ACPI_CPU_CMD_DATA_OFFSET_RW 8
+
+enum {
+    CPHP_CMD_MAX
+};
 
 static uint64_t cpu_hotplug_rd(void *opaque, hwaddr addr, unsigned size)
 {
@@ -26,6 +32,12 @@ static uint64_t cpu_hotplug_rd(void *opaque, hwaddr addr, unsigned size)
         val |= cdev->is_inserting ? 2 : 0;
         val |= cdev->is_removing  ? 4 : 0;
         trace_cpuhp_acpi_read_flags(cpu_st->selector, val);
+        break;
+    case ACPI_CPU_CMD_DATA_OFFSET_RW:
+        switch (cpu_st->command) {
+        default:
+           break;
+        }
         break;
     default:
         break;
@@ -78,6 +90,12 @@ static void cpu_hotplug_wr(void *opaque, hwaddr addr, uint64_t data,
             if (local_err) {
                 break;
             }
+        }
+        break;
+    case ACPI_CPU_CMD_OFFSET_WR:
+        trace_cpuhp_acpi_write_cmd(cpu_st->selector, data);
+        if (data < CPHP_CMD_MAX) {
+            cpu_st->command = data;
         }
         break;
     default:
@@ -211,6 +229,7 @@ const VMStateDescription vmstate_cpu_hotplug = {
     .minimum_version_id_old = 1,
     .fields      = (VMStateField[]) {
         VMSTATE_UINT32(selector, CPUHotplugState),
+        VMSTATE_UINT32(command, CPUHotplugState),
         VMSTATE_STRUCT_VARRAY_POINTER_UINT32(devs, CPUHotplugState, dev_count,
                                              vmstate_cpuhp_sts, AcpiCpuStatus),
         VMSTATE_END_OF_LIST()
@@ -230,6 +249,8 @@ const VMStateDescription vmstate_cpu_hotplug = {
 #define CPU_EJECT_EVENT   "CEJ0"
 #define CPU_INSERT_EVENT  "CINS"
 #define CPU_REMOVE_EVENT  "CRMV"
+#define CPU_COMMAND       "CCMD"
+#define CPU_DATA          "CDAT"
 
 void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
                     const char *res_root, const char *event_handler_method,
@@ -281,11 +302,16 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
             aml_append(field, aml_named_field(CPU_REMOVE_EVENT, 1));
             /* initiates device eject, write only */
             aml_append(field, aml_named_field(CPU_EJECT_EVENT, 1));
+            aml_append(field, aml_reserved_field(4));
+            aml_append(field, aml_named_field(CPU_COMMAND, 8));
             aml_append(cpu_ctrl_dev, field);
 
             field = aml_field("PRST", AML_DWORD_ACC, AML_NOLOCK, AML_PRESERVE);
             /* CPU selector, write only */
             aml_append(field, aml_named_field(CPU_SELECTOR, 32));
+            /* flags + cmd + 2byte align */
+            aml_append(field, aml_reserved_field(4 * 8));
+            aml_append(field, aml_named_field(CPU_DATA, 32));
             aml_append(cpu_ctrl_dev, field);
 
         }

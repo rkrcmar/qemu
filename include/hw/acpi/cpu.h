@@ -29,6 +29,7 @@ typedef struct CPUHotplugState {
     MemoryRegion ctrl_reg;
     bool is_enabled;
     uint32_t selector;
+    uint32_t command;
     uint32_t dev_count;
     AcpiCpuStatus *devs;
 } CPUHotplugState;
