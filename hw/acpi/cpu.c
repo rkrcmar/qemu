@@ -11,6 +11,7 @@
 #define ACPI_CPU_CMD_DATA_OFFSET_RW 8
 
 enum {
+    CPHP_PXM_CMD = 0,
     CPHP_CMD_MAX
 };
 
@@ -35,6 +36,12 @@ static uint64_t cpu_hotplug_rd(void *opaque, hwaddr addr, unsigned size)
         break;
     case ACPI_CPU_CMD_DATA_OFFSET_RW:
         switch (cpu_st->command) {
+        case CPHP_PXM_CMD: {
+           Object *o = OBJECT(CPU(cdev->cpu));
+           val = o ? object_property_get_int(o, "node", NULL) : ~0;
+           trace_cpuhp_acpi_read_pxm(cpu_st->selector, val);
+           break;
+        }
         default:
            break;
         }
@@ -243,6 +250,7 @@ const VMStateDescription vmstate_cpu_hotplug = {
 #define CPU_SCAN_METHOD   "CSCN"
 #define CPU_EJECT_METHOD  "CEJ0"
 #define CPU_NOTIFY_METHOD "CTFY"
+#define CPU_PXM_METHOD    "CPXM"
 
 #define CPU_ENABLED       "CPEN"
 #define CPU_SELECTOR      "CSEL"
@@ -321,6 +329,8 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
     cpus_dev = aml_device("\\_SB.CPUS");
     {
         int i;
+        bool has_pxm = true;
+        Error *local_err = NULL;
         Aml *one = aml_int(1);
         Aml *cpu_selector = aml_name("%s.%s", cphp_res_path, CPU_SELECTOR);
         Aml *ins_evt = aml_name("%s.%s", cphp_res_path, CPU_INSERT_EVENT);
@@ -328,11 +338,25 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
         Aml *ej_evt = aml_name("%s.%s", cphp_res_path, CPU_EJECT_EVENT);
         Aml *is_enabled = aml_name("%s.%s", cphp_res_path, CPU_ENABLED);
         Aml *ctrl_lock = aml_name("%s.%s", cphp_res_path, CPU_LOCK);
+        Aml *cpu_cmd = aml_name("%s.%s", cphp_res_path, CPU_COMMAND);
+        Aml *cpu_data = aml_name("%s.%s", cphp_res_path, CPU_DATA);
 
         aml_append(cpus_dev, aml_name_decl("_HID", aml_string("ACPI0010")));
         aml_append(cpus_dev, aml_name_decl("_CID", aml_eisaid("PNP0A05")));
 
         if (machine->cpu_hotplug) {
+            local_err = NULL;
+            /*
+             * sample 1st VCPU (BSP) if it has support for numa and use result
+             * to enable _PXM method support
+             */
+            object_property_get_int(OBJECT(arch_ids->cpus[0].cpu), "node",
+                                    &local_err);
+            if (local_err) {
+                error_free(local_err);
+                has_pxm = false;
+            }
+
             method = aml_method(CPU_NOTIFY_METHOD, 2, AML_NOTSERIALIZED);
             for (i = 0; i < arch_ids->len; i++) {
                 Aml *cpu = aml_name(CPU_NAME_FMT, i);
@@ -413,6 +437,23 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
                 aml_append(method, aml_release(ctrl_lock));
             }
             aml_append(cpus_dev, method);
+
+            if (has_pxm) {
+                method = aml_method(CPU_PXM_METHOD, 1, AML_SERIALIZED);
+                {
+                    Aml *uid = aml_arg(0);
+                    Aml *pxm = aml_local(0);
+                    Aml *pxm_cmd = aml_int(CPHP_PXM_CMD);
+
+                    aml_append(method, aml_acquire(ctrl_lock, 0xFFFF));
+                    aml_append(method, aml_store(uid, cpu_selector));
+                    aml_append(method, aml_store(pxm_cmd, cpu_cmd));
+                    aml_append(method, aml_store(cpu_data, pxm));
+                    aml_append(method, aml_release(ctrl_lock));
+                    aml_append(method, aml_return(pxm));
+                }
+                aml_append(cpus_dev, method);
+            }
         }
 
         /* build Processor object for each processor */
@@ -461,6 +502,13 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
                 method = aml_method("_EJ0", 1, AML_NOTSERIALIZED);
                 aml_append(method, aml_call1(CPU_EJECT_METHOD, uid));
                 aml_append(dev, method);
+
+                if (has_pxm) {
+                    method = aml_method("_PXM", 0, AML_SERIALIZED);
+                    aml_append(method,
+                        aml_return(aml_call1(CPU_PXM_METHOD, uid)));
+                    aml_append(dev, method);
+                }
             }
             aml_append(cpus_dev, dev);
         }
