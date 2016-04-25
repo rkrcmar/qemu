@@ -93,6 +93,7 @@ typedef struct AcpiPmInfo {
     uint32_t gpe0_blk;
     uint32_t gpe0_blk_len;
     uint32_t io_base;
+    bool legacy_cpu_hp;
     uint16_t cpu_hp_io_base;
     uint16_t mem_hp_io_base;
     uint16_t mem_hp_io_len;
@@ -140,6 +141,9 @@ static void acpi_get_pm_info(AcpiPmInfo *pm)
         pm->cpu_hp_io_base = ICH9_CPU_HOTPLUG_IO_BASE;
     }
     assert(obj);
+
+    pm->legacy_cpu_hp = object_property_get_bool(obj, "cpu-hotplug-legacy",
+                                                 NULL);
 
     pm->mem_hp_io_base = ACPI_MEMORY_HOTPLUG_BASE;
     pm->mem_hp_io_len = ACPI_MEMORY_HOTPLUG_IO_LEN;
@@ -1933,7 +1937,9 @@ build_dsdt(GArray *table_data, GArray *linker,
         build_q35_pci0_int(dsdt);
     }
 
-    build_legacy_cpu_hotplug_aml(dsdt, machine, pm->cpu_hp_io_base);
+    if (pm->legacy_cpu_hp) {
+        build_legacy_cpu_hotplug_aml(dsdt, machine, pm->cpu_hp_io_base);
+    }
     build_memory_hotplug_aml(dsdt, nr_mem, pm->mem_hp_io_base,
                              pm->mem_hp_io_len);
 
