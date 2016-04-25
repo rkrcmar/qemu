@@ -781,6 +781,17 @@ static void test_acpi_q35_tcg_bridge(void)
     free_test_data(&data);
 }
 
+static void test_acpi_piix4_tcg_cpuhp_legacy(void)
+{
+    test_data data;
+
+    memset(&data, 0, sizeof(data));
+    data.machine = MACHINE_PC;
+    data.variant = ".cphp_legacy";
+    test_acpi_one("-machine pc-i440fx-2.6,accel=tcg", &data);
+    free_test_data(&data);
+}
+
 int main(int argc, char *argv[])
 {
     const char *arch = qtest_get_arch();
@@ -797,6 +808,8 @@ int main(int argc, char *argv[])
         qtest_add_func("acpi/piix4/tcg/bridge", test_acpi_piix4_tcg_bridge);
         qtest_add_func("acpi/q35/tcg", test_acpi_q35_tcg);
         qtest_add_func("acpi/q35/tcg/bridge", test_acpi_q35_tcg_bridge);
+        qtest_add_func("acpi/piix4/tcg/cpuhp/legacy",
+                       test_acpi_piix4_tcg_cpuhp_legacy);
     }
     ret = g_test_run();
     boot_sector_cleanup(disk);
