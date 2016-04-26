@@ -464,7 +464,6 @@ static GArray *load_expected_aml(test_data *data)
 {
     int i;
     AcpiSdtTable *sdt;
-    gchar *aml_file = NULL;
     GError *error = NULL;
     gboolean ret;
 
@@ -472,7 +471,9 @@ static GArray *load_expected_aml(test_data *data)
     for (i = 0; i < data->tables->len; ++i) {
         AcpiSdtTable exp_sdt;
         uint32_t signature;
+        gchar *aml_file = NULL;
         const char *ext = data->variant ? data->variant : "";
+        int j;
 
         sdt = &g_array_index(data->tables, AcpiSdtTable, i);
 
@@ -481,16 +482,23 @@ static GArray *load_expected_aml(test_data *data)
 
         signature = cpu_to_le32(sdt->header.signature);
 
-try_again:
-        aml_file = g_strdup_printf("%s/%s/%.4s%s", data_dir, data->machine,
-                                   (gchar *)&signature, ext);
-        if (data->variant && !g_file_test(aml_file, G_FILE_TEST_EXISTS)) {
+        for (j = 2; j; j -= data->variant ? 1 : 2) {
             g_free(aml_file);
+            aml_file = g_strdup_printf("%s/%s/%.4s%s", data_dir, data->machine,
+                                       (gchar *)&signature, ext);
+            if (g_file_test(aml_file, G_FILE_TEST_EXISTS)) {
+                exp_sdt.aml_file = aml_file;
+                break;
+            }
+            if (getenv("V")) {
+                fprintf(stderr, "\nLooking for expected file '%s'\n", aml_file);
+            }
             ext = "";
-            goto try_again;
         }
-        exp_sdt.aml_file = aml_file;
-        g_assert(g_file_test(aml_file, G_FILE_TEST_EXISTS));
+        g_assert(exp_sdt.aml_file);
+        if (getenv("V")) {
+            fprintf(stderr, "\nUsing expected file '%s'\n", aml_file);
+        }
         ret = g_file_get_contents(aml_file, &exp_sdt.aml,
                                   &exp_sdt.aml_len, &error);
         g_assert(ret);
