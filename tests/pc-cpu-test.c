@@ -31,7 +31,7 @@ static void test_pc_with_cpu_add(gconstpointer data)
     QDict *response;
     unsigned int i;
 
-    args = g_strdup_printf("-machine %s -cpu %s "
+    args = g_strdup_printf("-machine %s,cpu-hotplug=on -cpu %s "
                            "-smp sockets=%u,cores=%u,threads=%u,maxcpus=%u",
                            s->machine, s->cpu_model,
                            s->sockets, s->cores, s->threads, s->maxcpus);
