@@ -2002,11 +2002,15 @@ static Property vtd_properties[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
+uint16_t vtd_svt_mask[VTD_SQ_MAX] = {0xffff, 0xfffb, 0xfff9, 0xfff8};
+
 /* Read IRTE entry with specific index */
 static int vtd_irte_get(IntelIOMMUState *iommu, uint16_t index,
-                        VTD_IRTE *entry)
+                        VTD_IRTE *entry, uint16_t sid)
 {
     dma_addr_t addr = 0x00;
+    uint16_t mask;
+    uint8_t bus, bus_max, bus_min;
 
     addr = iommu->intr_root + index * sizeof(*entry);
     if (dma_memory_read(&address_space_memory, addr, entry,
@@ -2033,23 +2037,57 @@ static int vtd_irte_get(IntelIOMMUState *iommu, uint16_t index,
         return -VTD_FR_IR_IRTE_RSVD;
     }
 
-    /*
-     * TODO: Check Source-ID corresponds to SVT (Source Validation
-     * Type) bits
-     */
+    if (sid != VTD_SID_INVALID) {
+        /* Validate IRTE SID */
+        switch (entry->sid_vtype) {
+        case VTD_SVT_NONE:
+            VTD_DPRINTF(IR, "No SID validation for IRTE index %d", index);
+            break;
+
+        case VTD_SVT_ALL:
+            mask = vtd_svt_mask[entry->sid_q];
+            if ((entry->source_id & mask) != (sid & mask)) {
+                VTD_DPRINTF(GENERAL, "SID validation for IRTE index "
+                            "%d failed (reqid 0x%04x sid 0x%04x)", index,
+                            sid, entry->source_id);
+                return -VTD_FR_IR_SID_ERR;
+            }
+            break;
+
+        case VTD_SVT_BUS:
+            bus_max = entry->source_id >> 8;
+            bus_min = entry->source_id & 0xff;
+            bus = sid >> 8;
+            if (bus > bus_max || bus < bus_min) {
+                VTD_DPRINTF(GENERAL, "SID validation for IRTE index %d "
+                            "failed (bus %d outside %d-%d)", index, bus,
+                            bus_min, bus_max);
+                return -VTD_FR_IR_SID_ERR;
+            }
+            break;
+
+        default:
+            VTD_DPRINTF(GENERAL, "Invalid SVT bits (0x%x) in IRTE index "
+                        "%d", entry->sid_vtype, index);
+            /* Take this as verification failure. */
+            return -VTD_FR_IR_SID_ERR;
+            break;
+        }
+    }
 
     return 0;
 }
 
 /* Fetch IRQ information of specific IR index */
-static int vtd_remap_irq_get(IntelIOMMUState *iommu, uint16_t index, VTDIrq *irq)
+static int vtd_remap_irq_get(IntelIOMMUState *iommu, uint16_t index,
+                             VTDIrq *irq, uint16_t sid)
 {
     VTD_IRTE irte;
     int ret = 0;
 
     bzero(&irte, sizeof(irte));
 
-    ret = vtd_irte_get(iommu, index, &irte);
+    ret = vtd_irte_get(iommu, index, &irte, sid);
     if (ret) {
         return ret;
     }
@@ -2101,7 +2139,8 @@ static void vtd_generate_msi_message(VTDIrq *irq, MSIMessage *msg_out)
 /* Interrupt remapping for MSI/MSI-X entry */
 static int vtd_interrupt_remap_msi(IntelIOMMUState *iommu,
                                    MSIMessage *origin,
-                                   MSIMessage *translated)
+                                   MSIMessage *translated,
+                                   uint16_t sid)
 {
     int ret = 0;
     VTD_IR_MSIAddress addr;
@@ -2136,7 +2175,7 @@ static int vtd_interrupt_remap_msi(IntelIOMMUState *iommu,
 
     index = addr.index_h << 15 | addr.index_l;
 
-    ret = vtd_remap_irq_get(iommu, index, &irq);
+    ret = vtd_remap_irq_get(iommu, index, &irq, sid);
     if (ret) {
         return ret;
     }
@@ -2180,9 +2219,10 @@ do_not_translate:
     return 0;
 }
 
-int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst)
+int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst,
+                  uint16_t sid)
 {
-    return vtd_interrupt_remap_msi(iommu, src, dst);
+    return vtd_interrupt_remap_msi(iommu, src, dst, sid);
 }
 
 static MemTxResult vtd_mem_ir_read(void *opaque, hwaddr addr,
@@ -2208,11 +2248,17 @@ static MemTxResult vtd_mem_ir_write(void *opaque, hwaddr addr,
 {
     int ret = 0;
     MSIMessage from = {0}, to = {0};
+    uint16_t sid = VTD_SID_INVALID;
 
     from.address = (uint64_t) addr + VTD_INTERRUPT_ADDR_FIRST;
     from.data = (uint32_t) value;
 
-    ret = vtd_interrupt_remap_msi(opaque, &from, &to);
+    if (!attrs.unspecified) {
+        /* We have explicit Source ID */
+        sid = attrs.requester_id;
+    }
+
+    ret = vtd_interrupt_remap_msi(opaque, &from, &to, sid);
     if (ret) {
         /* TODO: report error */
         VTD_DPRINTF(GENERAL, "int remap fail for addr 0x%"PRIx64
