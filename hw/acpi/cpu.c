@@ -218,19 +218,176 @@ const VMStateDescription vmstate_cpu_hotplug = {
 };
 
 #define CPU_NAME_FMT      "C%.03X"
+#define CPUHP_RES_DEVICE  "PRES"
+#define CPU_LOCK          "CPLK"
+#define CPU_STS_METHOD    "CSTA"
+#define CPU_SCAN_METHOD   "CSCN"
+#define CPU_EJECT_METHOD  "CEJ0"
+#define CPU_NOTIFY_METHOD "CTFY"
 
-void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat)
+#define CPU_ENABLED       "CPEN"
+#define CPU_SELECTOR      "CSEL"
+#define CPU_EJECT_EVENT   "CEJ0"
+#define CPU_INSERT_EVENT  "CINS"
+#define CPU_REMOVE_EVENT  "CRMV"
+
+void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat,
+                    const char *res_root, const char *event_handler_method,
+                    hwaddr io_base)
 {
+    Aml *ifctx;
+    Aml *field;
+    Aml *method;
+    Aml *cpu_ctrl_dev;
     Aml *cpus_dev;
+    Aml *zero = aml_int(0);
     Aml *sb_scope = aml_scope("_SB");
     MachineClass *mc = MACHINE_GET_CLASS(machine);
     CPUArchIdList *arch_ids = mc->possible_cpu_arch_ids(machine);
+    char *cphp_res_path = g_strdup_printf("%s." CPUHP_RES_DEVICE, res_root);
+    Object *obj = object_resolve_path_type("", TYPE_ACPI_DEVICE_IF, NULL);
+    AcpiDeviceIfClass *adevc = ACPI_DEVICE_IF_GET_CLASS(obj);
+    AcpiDeviceIf *adev = ACPI_DEVICE_IF(obj);
+
+    if (machine->cpu_hotplug) {
+        cpu_ctrl_dev = aml_device("%s", cphp_res_path);
+        {
+            Aml *crs;
+
+            aml_append(cpu_ctrl_dev,
+                aml_name_decl("_HID", aml_eisaid("PNP0A06")));
+            aml_append(cpu_ctrl_dev,
+                aml_name_decl("_UID", aml_string("CPU Hotplug resources")));
+            aml_append(cpu_ctrl_dev, aml_mutex(CPU_LOCK, 0));
+
+            crs = aml_resource_template();
+            aml_append(crs, aml_io(AML_DECODE16, io_base, io_base, 1,
+                                   ACPI_CPU_HOTPLUG_REG_LEN));
+            aml_append(cpu_ctrl_dev, aml_name_decl("_CRS", crs));
+
+            /* declare CPU hotplug MMIO region with related access fields */
+            aml_append(cpu_ctrl_dev,
+                aml_operation_region("PRST", AML_SYSTEM_IO, aml_int(io_base),
+                                     ACPI_CPU_HOTPLUG_REG_LEN));
+
+            field = aml_field("PRST", AML_BYTE_ACC, AML_NOLOCK,
+                              AML_WRITE_AS_ZEROS);
+            aml_append(field, aml_reserved_field(ACPI_CPU_FLAGS_OFFSET_RW * 8));
+            /* 1 if enabled, read only */
+            aml_append(field, aml_named_field(CPU_ENABLED, 1));
+            /* (read) 1 if has a insert event. (write) 1 to clear event */
+            aml_append(field, aml_named_field(CPU_INSERT_EVENT, 1));
+            /* (read) 1 if has a remove event. (write) 1 to clear event */
+            aml_append(field, aml_named_field(CPU_REMOVE_EVENT, 1));
+            /* initiates device eject, write only */
+            aml_append(field, aml_named_field(CPU_EJECT_EVENT, 1));
+            aml_append(cpu_ctrl_dev, field);
+
+            field = aml_field("PRST", AML_DWORD_ACC, AML_NOLOCK, AML_PRESERVE);
+            /* CPU selector, write only */
+            aml_append(field, aml_named_field(CPU_SELECTOR, 32));
+            aml_append(cpu_ctrl_dev, field);
+
+        }
+        aml_append(sb_scope, cpu_ctrl_dev);
+    }
+
     cpus_dev = aml_device("\\_SB.CPUS");
     {
         int i;
+        Aml *one = aml_int(1);
+        Aml *cpu_selector = aml_name("%s.%s", cphp_res_path, CPU_SELECTOR);
+        Aml *ins_evt = aml_name("%s.%s", cphp_res_path, CPU_INSERT_EVENT);
+        Aml *rm_evt = aml_name("%s.%s", cphp_res_path, CPU_REMOVE_EVENT);
+        Aml *ej_evt = aml_name("%s.%s", cphp_res_path, CPU_EJECT_EVENT);
+        Aml *is_enabled = aml_name("%s.%s", cphp_res_path, CPU_ENABLED);
+        Aml *ctrl_lock = aml_name("%s.%s", cphp_res_path, CPU_LOCK);
 
         aml_append(cpus_dev, aml_name_decl("_HID", aml_string("ACPI0010")));
         aml_append(cpus_dev, aml_name_decl("_CID", aml_eisaid("PNP0A05")));
+
+        if (machine->cpu_hotplug) {
+            method = aml_method(CPU_NOTIFY_METHOD, 2, AML_NOTSERIALIZED);
+            for (i = 0; i < arch_ids->len; i++) {
+                Aml *cpu = aml_name(CPU_NAME_FMT, i);
+                Aml *uid = aml_arg(0);
+                Aml *event = aml_arg(1);
+
+                ifctx = aml_if(aml_equal(uid, aml_int(i)));
+                {
+                    aml_append(ifctx, aml_notify(cpu, event));
+                }
+                aml_append(method, ifctx);
+            }
+            aml_append(cpus_dev, method);
+
+            method = aml_method(CPU_STS_METHOD, 1, AML_SERIALIZED);
+            {
+                Aml *idx = aml_arg(0);
+                Aml *sta = aml_local(0);
+
+                aml_append(method, aml_acquire(ctrl_lock, 0xFFFF));
+                aml_append(method, aml_store(idx, cpu_selector));
+                aml_append(method, aml_store(zero, sta));
+                ifctx = aml_if(aml_equal(is_enabled, one));
+                {
+                    aml_append(ifctx, aml_store(aml_int(0xF), sta));
+                }
+                aml_append(method, ifctx);
+                aml_append(method, aml_release(ctrl_lock));
+                aml_append(method, aml_return(sta));
+            }
+            aml_append(cpus_dev, method);
+
+            method = aml_method(CPU_EJECT_METHOD, 1, AML_SERIALIZED);
+            {
+                Aml *idx = aml_arg(0);
+
+                aml_append(method, aml_acquire(ctrl_lock, 0xFFFF));
+                aml_append(method, aml_store(idx, cpu_selector));
+                aml_append(method, aml_store(one, ej_evt));
+                aml_append(method, aml_release(ctrl_lock));
+            }
+            aml_append(cpus_dev, method);
+
+            method = aml_method(CPU_SCAN_METHOD, 0, AML_SERIALIZED);
+            {
+                Aml *else_ctx;
+                Aml *while_ctx;
+                Aml *idx = aml_local(0);
+                Aml *eject_req = aml_int(3);
+                Aml *dev_chk = aml_int(1);
+                Aml *cpus_count = aml_int(arch_ids->len);
+
+                aml_append(method, aml_acquire(ctrl_lock, 0xFFFF));
+                aml_append(method, aml_store(zero, idx));
+                while_ctx = aml_while(aml_lless(idx, cpus_count));
+                {
+                     aml_append(while_ctx, aml_store(idx, cpu_selector));
+                     ifctx = aml_if(aml_equal(ins_evt, one));
+                     {
+                         aml_append(ifctx,
+                             aml_call2(CPU_NOTIFY_METHOD, idx, dev_chk));
+                         aml_append(ifctx, aml_store(one, ins_evt));
+                     }
+                     aml_append(while_ctx, ifctx);
+                     else_ctx = aml_else();
+                     ifctx = aml_if(aml_equal(rm_evt, one));
+                     {
+                         aml_append(ifctx,
+                             aml_call2(CPU_NOTIFY_METHOD, idx, eject_req));
+                         aml_append(ifctx, aml_store(one, rm_evt));
+                     }
+                     aml_append(else_ctx, ifctx);
+                     aml_append(while_ctx, else_ctx);
+
+                     aml_append(while_ctx, aml_add(idx, one, idx));
+                }
+                aml_append(method, while_ctx);
+                aml_append(method, aml_release(ctrl_lock));
+            }
+            aml_append(cpus_dev, method);
+        }
 
         /* build Processor object for each processor */
         for (i = 0; i < arch_ids->len; i++) {
@@ -246,11 +403,51 @@ void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat)
                 aml_append(dev, aml_name_decl("_UID", uid));
             }
 
+            if (machine->cpu_hotplug) {
+                method = aml_method("_STA", 0, AML_SERIALIZED);
+                aml_append(method, aml_return(aml_call1(CPU_STS_METHOD, uid)));
+                aml_append(dev, method);
+
+                method = aml_method("_MAT", 0, AML_SERIALIZED);
+                {
+                    Aml *madt = aml_local(1);
+                    GArray *buf = g_array_new(0, 1, 1);
+
+                    adevc->madt_cpu(adev, i, arch_ids, buf);
+                    switch (buf->data[0]) {
+                    case ACPI_APIC_PROCESSOR: {
+                        AcpiMadtProcessorApic *apic = (void *)buf->data;
+                        apic->flags = cpu_to_le32(1);
+                        break;
+                    }
+                    default:
+                        assert(0);
+                    }
+                    aml_append(method,
+                        aml_store(aml_buffer(buf->len, (uint8_t *)buf->data),
+                                  madt));
+                    aml_append(method, aml_return(madt));
+                    g_array_free(buf, true);
+                }
+
+                aml_append(dev, method);
+
+                method = aml_method("_EJ0", 1, AML_NOTSERIALIZED);
+                aml_append(method, aml_call1(CPU_EJECT_METHOD, uid));
+                aml_append(dev, method);
+            }
             aml_append(cpus_dev, dev);
         }
     }
     aml_append(sb_scope, cpus_dev);
     aml_append(table, sb_scope);
 
+    if (machine->cpu_hotplug) {
+        method = aml_method(event_handler_method, 0, AML_NOTSERIALIZED);
+        aml_append(method, aml_call0("\\_SB.CPUS." CPU_SCAN_METHOD));
+        aml_append(table, method);
+    }
+
+    g_free(cphp_res_path);
     g_free(arch_ids);
 }

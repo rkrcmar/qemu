@@ -46,7 +46,9 @@ void acpi_cpu_unplug_cb(CPUHotplugState *cpu_st,
 void cpu_hotplug_hw_init(MemoryRegion *as, Object *owner,
                          CPUHotplugState *state, hwaddr base_addr);
 
-void build_cpus_aml(Aml *table, MachineState *machine, bool apci1_compat);
+void build_cpus_aml(Aml *table, MachineState *machine, bool apci1_compat,
+                    const char *res_root, const char *event_handler_method,
+                    hwaddr io_base);
 
 extern const VMStateDescription vmstate_cpu_hotplug;
 #define VMSTATE_CPU_HOTPLUG(cpuhp, state) \
