@@ -14,6 +14,7 @@
 
 #include "hw/qdev-core.h"
 #include "hw/acpi/acpi.h"
+#include "hw/acpi/aml-build.h"
 #include "hw/hotplug.h"
 
 typedef struct AcpiCpuStatus {
@@ -44,6 +45,8 @@ void acpi_cpu_unplug_cb(CPUHotplugState *cpu_st,
 
 void cpu_hotplug_hw_init(MemoryRegion *as, Object *owner,
                          CPUHotplugState *state, hwaddr base_addr);
+
+void build_cpus_aml(Aml *table, MachineState *machine, bool apci1_compat);
 
 extern const VMStateDescription vmstate_cpu_hotplug;
 #define VMSTATE_CPU_HOTPLUG(cpuhp, state) \

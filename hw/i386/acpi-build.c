@@ -1948,6 +1948,8 @@ build_dsdt(GArray *table_data, GArray *linker,
 
     if (pm->legacy_cpu_hp) {
         build_legacy_cpu_hotplug_aml(dsdt, machine, pm->cpu_hp_io_base);
+    } else {
+        build_cpus_aml(dsdt, machine, true);
     }
     build_memory_hotplug_aml(dsdt, nr_mem, pm->mem_hp_io_base,
                              pm->mem_hp_io_len);

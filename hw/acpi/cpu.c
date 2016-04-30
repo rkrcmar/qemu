@@ -216,3 +216,41 @@ const VMStateDescription vmstate_cpu_hotplug = {
         VMSTATE_END_OF_LIST()
     }
 };
+
+#define CPU_NAME_FMT      "C%.03X"
+
+void build_cpus_aml(Aml *table, MachineState *machine, bool acpi1_compat)
+{
+    Aml *cpus_dev;
+    Aml *sb_scope = aml_scope("_SB");
+    MachineClass *mc = MACHINE_GET_CLASS(machine);
+    CPUArchIdList *arch_ids = mc->possible_cpu_arch_ids(machine);
+    cpus_dev = aml_device("\\_SB.CPUS");
+    {
+        int i;
+
+        aml_append(cpus_dev, aml_name_decl("_HID", aml_string("ACPI0010")));
+        aml_append(cpus_dev, aml_name_decl("_CID", aml_eisaid("PNP0A05")));
+
+        /* build Processor object for each processor */
+        for (i = 0; i < arch_ids->len; i++) {
+            Aml *dev;
+            Aml *uid = aml_int(i);
+            int arch_id = arch_ids->cpus[i].arch_id;
+
+            if (acpi1_compat && arch_id < 255) {
+                dev = aml_processor(i, 0, 0, CPU_NAME_FMT, i);
+            } else {
+                dev = aml_device(CPU_NAME_FMT, arch_id);
+                aml_append(dev, aml_name_decl("_HID", aml_string("ACPI0007")));
+                aml_append(dev, aml_name_decl("_UID", uid));
+            }
+
+            aml_append(cpus_dev, dev);
+        }
+    }
+    aml_append(sb_scope, cpus_dev);
+    aml_append(table, sb_scope);
+
+    g_free(arch_ids);
+}
