@@ -877,6 +877,11 @@ static void apic_realize(DeviceState *dev, Error **errp)
     msi_nonbroken = true;
 }
 
+static void apic_deliver_msi(MSIMessage *msi)
+{
+    apic_send_msi(msi->address, msi->data);
+}
+
 static void apic_class_init(ObjectClass *klass, void *data)
 {
     APICCommonClass *k = APIC_COMMON_CLASS(klass);
@@ -889,6 +894,8 @@ static void apic_class_init(ObjectClass *klass, void *data)
     k->external_nmi = apic_external_nmi;
     k->pre_save = apic_pre_save;
     k->post_load = apic_post_load;
+
+    k->deliver_msi = apic_deliver_msi;
 }
 
 static const TypeInfo apic_info = {
