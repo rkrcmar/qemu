@@ -25,6 +25,7 @@
 #include "intel_iommu_internal.h"
 #include "hw/pci/pci.h"
 #include "hw/boards.h"
+#include "hw/i386/x86-iommu.h"
 
 /*#define DEBUG_INTEL_IOMMU*/
 #ifdef DEBUG_INTEL_IOMMU
@@ -191,7 +192,7 @@ static void vtd_reset_context_cache(IntelIOMMUState *s)
 
     VTD_DPRINTF(CACHE, "global context_cache_gen=1");
     while (g_hash_table_iter_next (&bus_it, NULL, (void**)&vtd_bus)) {
-        for (devfn_it = 0; devfn_it < VTD_PCI_DEVFN_MAX; ++devfn_it) {
+        for (devfn_it = 0; devfn_it < X86_IOMMU_PCI_DEVFN_MAX; ++devfn_it) {
             vtd_as = vtd_bus->dev_as[devfn_it];
             if (!vtd_as) {
                 continue;
@@ -903,17 +904,7 @@ static void vtd_root_table_setup(IntelIOMMUState *s)
 static void vtd_iec_notify_all(IntelIOMMUState *s, bool global,
                                uint32_t index, uint32_t mask)
 {
-    VTD_IEC_Notifier *notifier;
-
-    VTD_DPRINTF(INV, "notify IEC invalidate: global=%d, index=%u, mask=%u",
-                global, index, mask);
-
-    QLIST_FOREACH(notifier, &s->iec_notifiers, list) {
-        if (notifier->iec_notify) {
-            notifier->iec_notify(notifier->private, global,
-                                 index, mask);
-        }
-    }
+    x86_iommu_iec_notify_all(X86_IOMMU_DEVICE(s), global, index, mask);
 }
 
 static void vtd_interrupt_remap_table_setup(IntelIOMMUState *s)
@@ -994,7 +985,7 @@ static void vtd_context_device_invalidate(IntelIOMMUState *s,
     vtd_bus = vtd_find_as_from_bus_num(s, VTD_SID_TO_BUS(source_id));
     if (vtd_bus) {
         devfn = VTD_SID_TO_DEVFN(source_id);
-        for (devfn_it = 0; devfn_it < VTD_PCI_DEVFN_MAX; ++devfn_it) {
+        for (devfn_it = 0; devfn_it < X86_IOMMU_PCI_DEVFN_MAX; ++devfn_it) {
             vtd_as = vtd_bus->dev_as[devfn_it];
             if (vtd_as && ((devfn_it & mask) == (devfn & mask))) {
                 VTD_DPRINTF(INV, "invalidate context-cahce of devfn 0x%"PRIx16,
@@ -2037,7 +2028,7 @@ static int vtd_irte_get(IntelIOMMUState *iommu, uint16_t index,
         return -VTD_FR_IR_IRTE_RSVD;
     }
 
-    if (sid != VTD_SID_INVALID) {
+    if (sid != X86_IOMMU_SID_INVALID) {
         /* Validate IRTE SID */
         switch (entry->sid_vtype) {
         case VTD_SVT_NONE:
@@ -2219,10 +2210,11 @@ do_not_translate:
     return 0;
 }
 
-int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst,
-                  uint16_t sid)
+static int vtd_int_remap(X86IOMMUState *iommu, MSIMessage *src,
+                         MSIMessage *dst, uint16_t sid)
 {
-    return vtd_interrupt_remap_msi(iommu, src, dst, sid);
+    return vtd_interrupt_remap_msi(INTEL_IOMMU_DEVICE(iommu),
+                                   src, dst, sid);
 }
 
 static MemTxResult vtd_mem_ir_read(void *opaque, hwaddr addr,
@@ -2248,7 +2240,7 @@ static MemTxResult vtd_mem_ir_write(void *opaque, hwaddr addr,
 {
     int ret = 0;
     MSIMessage from = {0}, to = {0};
-    uint16_t sid = VTD_SID_INVALID;
+    uint16_t sid = X86_IOMMU_SID_INVALID;
 
     from.address = (uint64_t) addr + VTD_INTERRUPT_ADDR_FIRST;
     from.data = (uint32_t) value;
@@ -2293,24 +2285,18 @@ static const MemoryRegionOps vtd_mem_ir_ops = {
     },
 };
 
-void vtd_iec_register_notifier(IntelIOMMUState *s, vtd_iec_notify_fn fn,
-                               void *data)
+static AddressSpace *vtd_find_add_as(X86IOMMUState *x86_iommu, PCIBus *bus,
+                                     int devfn)
 {
-    VTD_IEC_Notifier *notifier = g_new0(VTD_IEC_Notifier, 1);
-    notifier->iec_notify = fn;
-    notifier->private = data;
-    QLIST_INSERT_HEAD(&s->iec_notifiers, notifier, list);
-}
-
-VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
-{
+    IntelIOMMUState *s = (IntelIOMMUState *)x86_iommu;
     uintptr_t key = (uintptr_t)bus;
     VTDBus *vtd_bus = g_hash_table_lookup(s->vtd_as_by_busptr, &key);
     VTDAddressSpace *vtd_dev_as;
 
     if (!vtd_bus) {
         /* No corresponding free() */
-        vtd_bus = g_malloc0(sizeof(VTDBus) + sizeof(VTDAddressSpace *) * VTD_PCI_DEVFN_MAX);
+        vtd_bus = g_malloc0(sizeof(VTDBus) + sizeof(VTDAddressSpace *) * \
+                            X86_IOMMU_PCI_DEVFN_MAX);
         vtd_bus->bus = bus;
         key = (uintptr_t)bus;
         g_hash_table_insert(s->vtd_as_by_busptr, &key, vtd_bus);
@@ -2335,20 +2321,7 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
         address_space_init(&vtd_dev_as->as,
                            &vtd_dev_as->iommu, "intel_iommu");
     }
-    return vtd_dev_as;
-}
-
-IntelIOMMUState *vtd_iommu_get(void)
-{
-    bool ambiguous = false;
-    Object *intel_iommu = NULL;
-
-    intel_iommu = object_resolve_path_type("", TYPE_X86_IOMMU_DEVICE,
-                                 &ambiguous);
-    if (ambiguous)
-        intel_iommu = NULL;
-
-    return (IntelIOMMUState *)intel_iommu;
+    return &vtd_dev_as->as;
 }
 
 /* Do the initialization. It will also be called when reset, so pay
@@ -2452,6 +2425,7 @@ static void vtd_reset(DeviceState *dev)
 static void vtd_realize(DeviceState *dev, Error **errp)
 {
     IntelIOMMUState *s = INTEL_IOMMU_DEVICE(dev);
+    X86IOMMUState *x86_iommu = X86_IOMMU_DEVICE(s);
 
     VTD_DPRINTF(GENERAL, "");
     memset(s->vtd_as_by_bus_num, 0, sizeof(s->vtd_as_by_bus_num));
@@ -2463,18 +2437,21 @@ static void vtd_realize(DeviceState *dev, Error **errp)
                                      g_free, g_free);
     s->vtd_as_by_busptr = g_hash_table_new_full(vtd_uint64_hash, vtd_uint64_equal,
                                               g_free, g_free);
-    QLIST_INIT(&s->iec_notifiers);
     vtd_init(s);
+    x86_iommu_set_default(x86_iommu);
 }
 
 static void vtd_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
+    X86IOMMUClass *x86_class = X86_IOMMU_CLASS(klass);
 
     dc->reset = vtd_reset;
-    dc->realize = vtd_realize;
     dc->vmsd = &vtd_vmstate;
     dc->props = vtd_properties;
+    x86_class->realize = vtd_realize;
+    x86_class->find_add_as = vtd_find_add_as;
+    x86_class->int_remap = vtd_int_remap;
 }
 
 static const TypeInfo vtd_info = {

@@ -38,7 +38,6 @@
 #define VTD_PCI_BUS_MAX             256
 #define VTD_PCI_SLOT_MAX            32
 #define VTD_PCI_FUNC_MAX            8
-#define VTD_PCI_DEVFN_MAX           256
 #define VTD_PCI_SLOT(devfn)         (((devfn) >> 3) & 0x1f)
 #define VTD_PCI_FUNC(devfn)         ((devfn) & 0x07)
 #define VTD_SID_TO_BUS(sid)         (((sid) >> 8) & 0xff)
@@ -221,24 +220,6 @@ struct VTD_MSIMessage {
 /* When IR is enabled, all MSI/MSI-X data bits should be zero */
 #define VTD_IR_MSI_DATA          (0)
 
-/**
- * vtd_iec_notify_fn - IEC (Interrupt Entry Cache) notifier hook,
- *                     triggered when IR invalidation happens.
- * @private: private data
- * @global: whether this is a global IEC invalidation
- * @index: IRTE index to invalidate (start from)
- * @mask: invalidation mask
- */
-typedef void (*vtd_iec_notify_fn)(void *private, bool global,
-                                  uint32_t index, uint32_t mask);
-
-struct VTD_IEC_Notifier {
-    vtd_iec_notify_fn iec_notify;
-    void *private;
-    QLIST_ENTRY(VTD_IEC_Notifier) list;
-};
-typedef struct VTD_IEC_Notifier VTD_IEC_Notifier;
-
 /* The iommu (DMAR) device state struct */
 struct IntelIOMMUState {
     X86IOMMUState x86_iommu;
@@ -280,20 +261,6 @@ struct IntelIOMMUState {
     dma_addr_t intr_root;           /* Interrupt remapping table pointer */
     uint32_t intr_size;             /* Number of IR table entries */
     bool intr_eime;                 /* Extended interrupt mode enabled */
-    QLIST_HEAD(, VTD_IEC_Notifier) iec_notifiers; /* IEC notify list */
 };
-
-/* Find the VTD Address space associated with the given bus pointer,
- * create a new one if none exists
- */
-VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn);
-/* Get default IOMMU object */
-IntelIOMMUState *vtd_iommu_get(void);
-int vtd_int_remap(void *iommu, MSIMessage *src, MSIMessage *dst, uint16_t sid);
-/* Register IEC invalidate notifier */
-void vtd_iec_register_notifier(IntelIOMMUState *s, vtd_iec_notify_fn fn,
-                               void *data);
-
-#define  VTD_SID_INVALID  (0xffff)
 
 #endif

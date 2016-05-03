@@ -30,7 +30,7 @@
 #include "sysemu/kvm.h"
 #include "target-i386/cpu.h"
 #include "hw/i386/apic-msidef.h"
-#include "hw/i386/intel_iommu.h"
+#include "hw/i386/x86-iommu.h"
 
 //#define DEBUG_IOAPIC
 
@@ -375,12 +375,12 @@ static void ioapic_realize(DeviceState *dev, Error **errp)
 
 #ifdef CONFIG_KVM
     if (kvm_irqchip_is_split()) {
-        IntelIOMMUState *iommu = vtd_iommu_get();
+        X86IOMMUState *iommu = x86_iommu_get_default();
         if (iommu) {
             /* Register this IOAPIC with IOMMU IEC notifier, so that
              * when there are IR invalidates, we can be notified to
              * update kernel IR cache. */
-            vtd_iec_register_notifier(iommu, ioapic_iec_notifier, s);
+            x86_iommu_iec_register_notifier(iommu, ioapic_iec_notifier, s);
         }
     }
 #endif

@@ -51,7 +51,7 @@
 #include "hw/i386/ich9.h"
 #include "hw/pci/pci_bus.h"
 #include "hw/pci-host/q35.h"
-#include "hw/i386/intel_iommu.h"
+#include "hw/i386/x86-iommu.h"
 #include "hw/timer/hpet.h"
 
 #include "hw/acpi/aml-build.h"
@@ -2677,7 +2677,7 @@ static bool acpi_get_mcfg(AcpiMcfgInfo *mcfg)
 
 static bool acpi_has_iommu(void)
 {
-    return !!vtd_iommu_get();
+    return !!x86_iommu_get_default();
 }
 
 static

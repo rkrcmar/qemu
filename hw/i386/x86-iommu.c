@@ -22,8 +22,56 @@
 #include "hw/boards.h"
 #include "hw/i386/x86-iommu.h"
 
+/* Default X86 IOMMU device */
+static X86IOMMUState *x86_iommu_default = NULL;
+
+void x86_iommu_set_default(X86IOMMUState *x86_iommu)
+{
+    assert(x86_iommu);
+    assert(x86_iommu_default == NULL);
+    x86_iommu_default = x86_iommu;
+}
+
+X86IOMMUState *x86_iommu_get_default(void)
+{
+    return x86_iommu_default;
+}
+
+void x86_iommu_iec_register_notifier(X86IOMMUState *iommu,
+                                     iec_notify_fn fn, void *data)
+{
+    IEC_Notifier *notifier = g_new0(IEC_Notifier, 1);
+    notifier->iec_notify = fn;
+    notifier->private = data;
+    QLIST_INSERT_HEAD(&iommu->iec_notifiers, notifier, list);
+}
+
+void x86_iommu_iec_notify_all(X86IOMMUState *iommu, bool global,
+                              uint32_t index, uint32_t mask)
+{
+    IEC_Notifier *notifier;
+    QLIST_FOREACH(notifier, &iommu->iec_notifiers, list) {
+        if (notifier->iec_notify) {
+            notifier->iec_notify(notifier->private, global,
+                                 index, mask);
+        }
+    }
+}
+
+static void x86_iommu_realize(DeviceState *dev, Error **errp)
+{
+    X86IOMMUState *x86_iommu = X86_IOMMU_DEVICE(dev);
+    X86IOMMUClass *x86_class = X86_IOMMU_GET_CLASS(dev);
+    QLIST_INIT(&x86_iommu->iec_notifiers);
+    if (x86_class->realize) {
+        x86_class->realize(dev, errp);
+    }
+}
+
 static void x86_iommu_class_init(ObjectClass *klass, void *data)
 {
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    dc->realize = x86_iommu_realize;
 }
 
 static const TypeInfo x86_iommu_info = {
@@ -31,6 +79,7 @@ static const TypeInfo x86_iommu_info = {
     .parent        = TYPE_SYS_BUS_DEVICE,
     .instance_size = sizeof(X86IOMMUState),
     .class_init    = x86_iommu_class_init,
+    .class_size    = sizeof(X86IOMMUClass),
     .abstract      = true,
 };
 

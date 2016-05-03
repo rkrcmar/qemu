@@ -426,13 +426,10 @@ static void mch_reset(DeviceState *qdev)
 
 static AddressSpace *q35_host_dma_iommu(PCIBus *bus, void *opaque, int devfn)
 {
-    IntelIOMMUState *s = opaque;
-    VTDAddressSpace *vtd_as;
-
-    assert(0 <= devfn && devfn <= VTD_PCI_DEVFN_MAX);
-
-    vtd_as = vtd_find_add_as(s, bus, devfn);
-    return &vtd_as->as;
+    X86IOMMUState *x86_iommu = opaque;
+    X86IOMMUClass *x86_class = X86_IOMMU_GET_CLASS(x86_iommu);
+    assert(0 <= devfn && devfn <= X86_IOMMU_PCI_DEVFN_MAX);
+    return x86_class->find_add_as(x86_iommu, bus, devfn);
 }
 
 static void mch_init_dmar(MCHPCIState *mch)
