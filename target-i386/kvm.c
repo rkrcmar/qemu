@@ -3340,7 +3340,8 @@ int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
             return 1;
         }
 
-        route->u.msi.address_hi = dst.address >> VTD_MSI_ADDR_HI_SHIFT;
+        if (kvm_x2apic_api_enabled())
+            route->u.msi.address_hi = dst.address >> VTD_MSI_ADDR_HI_SHIFT;
         route->u.msi.address_lo = dst.address & VTD_MSI_ADDR_LO_MASK;
         route->u.msi.data = dst.data;
     }

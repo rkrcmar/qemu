@@ -31,6 +31,7 @@ bool kvm_gsi_direct_mapping;
 bool kvm_allowed;
 bool kvm_readonly_mem_allowed;
 bool kvm_ioeventfd_any_length_allowed;
+bool kvm_x2apic_api;
 
 int kvm_init_vcpu(CPUState *cpu)
 {

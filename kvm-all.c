@@ -81,6 +81,7 @@ struct KVMState
 #endif
     int many_ioeventfds;
     int intx_set_mask;
+    bool msi_x2apic;
     /* The man page (and posix) say ioctl numbers are signed int, but
      * they're not.  Linux, glibc and *BSD all treat ioctl numbers as
      * unsigned, and treating them as signed here can break things */
@@ -113,6 +114,7 @@ bool kvm_readonly_mem_allowed;
 bool kvm_vm_attributes_allowed;
 bool kvm_direct_msi_allowed;
 bool kvm_ioeventfd_any_length_allowed;
+bool kvm_x2apic_api;
 
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
     KVM_CAP_INFO(USER_MEMORY),
@@ -1140,7 +1142,8 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
 
     if (kvm_direct_msi_allowed) {
         msi.address_lo = (uint32_t)msg.address;
-        msi.address_hi = msg.address >> 32;
+        if (kvm_x2apic_api_enabled())
+            msi.address_hi = msg.address >> 32;
         msi.data = le32_to_cpu(msg.data);
         msi.flags = 0;
         memset(msi.pad, 0, sizeof(msi.pad));
@@ -1162,7 +1165,8 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
         route->kroute.type = KVM_IRQ_ROUTING_MSI;
         route->kroute.flags = 0;
         route->kroute.u.msi.address_lo = (uint32_t)msg.address;
-        route->kroute.u.msi.address_hi = msg.address >> 32;
+        if (kvm_x2apic_api_enabled())
+            route->kroute.u.msi.address_hi = msg.address >> 32;
         route->kroute.u.msi.data = le32_to_cpu(msg.data);
 
         kvm_add_routing_entry(s, &route->kroute);
@@ -1654,6 +1658,10 @@ static int kvm_init(MachineState *ms)
     kvm_ioeventfd_any_length_allowed =
         (kvm_check_extension(s, KVM_CAP_IOEVENTFD_ANY_LENGTH) > 0);
 
+    if (kvm_check_extension(s, KVM_CAP_X2APIC_API) &&
+        !kvm_vm_enable_cap(s, KVM_CAP_X2APIC_API, 0))
+        kvm_x2apic_api = true;
+
     ret = kvm_arch_init(ms, s);
     if (ret < 0) {
         goto err;
@@ -2108,6 +2116,11 @@ int kvm_has_gsi_routing(void)
 int kvm_has_intx_set_mask(void)
 {
     return kvm_state->intx_set_mask;
+}
+
+bool kvm_has_msi_x2apic(void)
+{
+    return kvm_state->msi_x2apic;
 }
 
 void kvm_setup_guest_memory(void *start, size_t size)

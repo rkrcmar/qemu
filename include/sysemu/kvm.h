@@ -53,6 +53,7 @@ extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
 extern bool kvm_direct_msi_allowed;
 extern bool kvm_ioeventfd_any_length_allowed;
+extern bool kvm_x2apic_api;
 
 #if defined CONFIG_KVM || !defined NEED_CPU_H
 #define kvm_enabled()           (kvm_allowed)
@@ -169,6 +170,12 @@ extern bool kvm_ioeventfd_any_length_allowed;
  */
 #define kvm_ioeventfd_any_length_enabled() (kvm_ioeventfd_any_length_allowed)
 
+/**
+ * kvm_x2apic_api_enabled:
+ * Returns: true if KVM uses x2apic api.
+ */
+#define kvm_x2apic_api_enabled() (kvm_x2apic_api)
+
 #else
 #define kvm_enabled()           (0)
 #define kvm_irqchip_in_kernel() (false)
@@ -213,6 +220,7 @@ int kvm_has_pit_state2(void);
 int kvm_has_many_ioeventfds(void);
 int kvm_has_gsi_routing(void);
 int kvm_has_intx_set_mask(void);
+bool kvm_has_msi_x2apic(void);
 
 int kvm_init_vcpu(CPUState *cpu);
 int kvm_cpu_exec(CPUState *cpu);
