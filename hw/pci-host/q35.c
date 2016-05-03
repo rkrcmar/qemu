@@ -441,7 +441,7 @@ static void mch_init_dmar(MCHPCIState *mch)
     PCIBus *pci_bus = PCI_BUS(qdev_get_parent_bus(DEVICE(mch)));
 
     mch->iommu = INTEL_IOMMU_DEVICE(qdev_create(NULL, TYPE_INTEL_IOMMU_DEVICE));
-    object_property_add_child(OBJECT(mch), "intel-iommu",
+    object_property_add_child(OBJECT(mch), "x86-iommu",
                               OBJECT(mch->iommu), NULL);
     qdev_init_nofail(DEVICE(mch->iommu));
     sysbus_mmio_map(SYS_BUS_DEVICE(mch->iommu), 0, Q35_HOST_BRIDGE_IOMMU_ADDR);

@@ -2343,7 +2343,7 @@ IntelIOMMUState *vtd_iommu_get(void)
     bool ambiguous = false;
     Object *intel_iommu = NULL;
 
-    intel_iommu = object_resolve_path_type("", TYPE_INTEL_IOMMU_DEVICE,
+    intel_iommu = object_resolve_path_type("", TYPE_X86_IOMMU_DEVICE,
                                  &ambiguous);
     if (ambiguous)
         intel_iommu = NULL;
@@ -2479,7 +2479,7 @@ static void vtd_class_init(ObjectClass *klass, void *data)
 
 static const TypeInfo vtd_info = {
     .name          = TYPE_INTEL_IOMMU_DEVICE,
-    .parent        = TYPE_SYS_BUS_DEVICE,
+    .parent        = TYPE_X86_IOMMU_DEVICE,
     .instance_size = sizeof(IntelIOMMUState),
     .class_init    = vtd_class_init,
 };
