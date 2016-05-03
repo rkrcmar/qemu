@@ -26,6 +26,7 @@
 #include "hw/pci/pci.h"
 #include "hw/boards.h"
 #include "hw/i386/x86-iommu.h"
+#include "hw/i386/apic_internal.h"
 
 /*#define DEBUG_INTEL_IOMMU*/
 #ifdef DEBUG_INTEL_IOMMU
@@ -268,24 +269,33 @@ static void vtd_update_iotlb(IntelIOMMUState *s, uint16_t source_id,
     g_hash_table_replace(s->iotlb, key, entry);
 }
 
+static void apic_deliver_msi(MSIMessage *msi)
+{
+    /* Conjure apic-bound msi delivery out of thin air. */
+    X86CPU *cpu = X86_CPU(first_cpu);
+    APICCommonState *apic_state = APIC_COMMON(cpu->apic_state);
+    APICCommonClass *apic_class = APIC_COMMON_GET_CLASS(apic_state);
+
+    apic_class->deliver_msi(msi);
+}
+
 /* Given the reg addr of both the message data and address, generate an
  * interrupt via MSI.
  */
 static void vtd_generate_interrupt(IntelIOMMUState *s, hwaddr mesg_addr_reg,
                                    hwaddr mesg_data_reg)
 {
-    hwaddr addr;
-    uint32_t data;
+    MSIMessage msi;
 
     assert(mesg_data_reg < DMAR_REG_SIZE);
     assert(mesg_addr_reg < DMAR_REG_SIZE);
 
-    addr = vtd_get_long_raw(s, mesg_addr_reg);
-    data = vtd_get_long_raw(s, mesg_data_reg);
+    msi.address = vtd_get_quad_raw(s, mesg_addr_reg);
+    msi.data = vtd_get_long_raw(s, mesg_data_reg);
 
     VTD_DPRINTF(FLOG, "msi: addr 0x%"PRIx64 " data 0x%"PRIx32, addr, data);
-    address_space_stl_le(&address_space_memory, addr, data,
-                         MEMTXATTRS_UNSPECIFIED, NULL);
+
+    apic_deliver_msi(&msi);
 }
 
 /* Generate a fault event to software via MSI if conditions are met.
@@ -2114,6 +2124,7 @@ static void vtd_generate_msi_message(VTDIrq *irq, MSIMessage *msg_out)
     msg.dest_mode = irq->dest_mode;
     msg.redir_hint = irq->redir_hint;
     msg.dest = irq->dest;
+    msg.__addr_hi = cpu_to_le32(irq->dest & 0xffffff00);
     msg.__addr_head = cpu_to_le32(0xfee);
     /* Keep this from original MSI address bits */
     msg.__not_used = irq->msi_addr_last_bits;
