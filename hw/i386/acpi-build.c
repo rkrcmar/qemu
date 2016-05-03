@@ -2366,7 +2366,6 @@ static void
 build_srat(GArray *table_data, GArray *linker, MachineState *machine)
 {
     AcpiSystemResourceAffinityTable *srat;
-    AcpiSratProcessorAffinity *core;
     AcpiSratMemoryAffinity *numamem;
 
     int i;
@@ -2386,17 +2385,30 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
     srat->reserved1 = cpu_to_le32(1);
 
     for (i = 0; i < apic_ids->len; i++) {
-        int apic_id = apic_ids->cpus[i].arch_id;
+        uint32_t apic_id = apic_ids->cpus[i].arch_id;
 
-        core = acpi_data_push(table_data, sizeof *core);
-        core->type = ACPI_SRAT_PROCESSOR;
-        core->length = sizeof(*core);
-        core->local_apic_id = apic_id;
-        curnode = pcms->node_cpu[i];
-        core->proximity_lo = curnode;
-        memset(core->proximity_hi, 0, 3);
-        core->local_sapic_eid = 0;
-        core->flags = cpu_to_le32(1);
+        if (apic_id < 255) {
+            AcpiSratProcessorAffinity *core;
+
+            core = acpi_data_push(table_data, sizeof *core);
+            core->type = ACPI_SRAT_PROCESSOR;
+            core->length = sizeof(*core);
+            core->local_apic_id = apic_id;
+            curnode = pcms->node_cpu[i];
+            core->proximity_lo = curnode;
+            memset(core->proximity_hi, 0, 3);
+            core->local_sapic_eid = 0;
+            core->flags = cpu_to_le32(1);
+        } else {
+            AcpiSratProcessorX2ApicAffinity *core;
+
+            core = acpi_data_push(table_data, sizeof *core);
+            core->type = ACPI_SRAT_PROCESSOR_X2APIC;
+            core->length = sizeof(*core);
+            core->x2apic_id = apic_id;
+            core->proximity_domain = cpu_to_le32(pcms->node_cpu[i]);
+            core->flags = cpu_to_le32(1);
+        }
     }
 
 
