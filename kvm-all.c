@@ -81,6 +81,7 @@ struct KVMState
 #endif
     int many_ioeventfds;
     int intx_set_mask;
+    bool msi_x2apic;
     /* The man page (and posix) say ioctl numbers are signed int, but
      * they're not.  Linux, glibc and *BSD all treat ioctl numbers as
      * unsigned, and treating them as signed here can break things */
@@ -1143,6 +1144,9 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
         msi.address_hi = msg.address >> 32;
         msi.data = le32_to_cpu(msg.data);
         msi.flags = 0;
+        if (kvm_has_msi_x2apic()) {
+            msi.flags |= KVM_SIGNAL_MSI_X2APIC;
+        }
         memset(msi.pad, 0, sizeof(msi.pad));
 
         return kvm_vm_ioctl(s, KVM_SIGNAL_MSI, &msi);
@@ -1159,7 +1163,8 @@ int kvm_irqchip_send_msi(KVMState *s, MSIMessage msg)
 
         route = g_malloc0(sizeof(KVMMSIRoute));
         route->kroute.gsi = virq;
-        route->kroute.type = KVM_IRQ_ROUTING_MSI;
+        route->kroute.type = kvm_has_msi_x2apic() ? KVM_IRQ_ROUTING_MSI_X2APIC
+                                                  : KVM_IRQ_ROUTING_MSI;
         route->kroute.flags = 0;
         route->kroute.u.msi.address_lo = (uint32_t)msg.address;
         route->kroute.u.msi.address_hi = msg.address >> 32;
@@ -1622,6 +1627,8 @@ static int kvm_init(MachineState *ms)
 #endif
 
     s->intx_set_mask = kvm_check_extension(s, KVM_CAP_PCI_2_3);
+
+    s->msi_x2apic = kvm_check_extension(s, KVM_CAP_MSI_X2APIC);
 
     s->irq_set_ioctl = KVM_IRQ_LINE;
     if (kvm_check_extension(s, KVM_CAP_IRQ_INJECT_STATUS)) {
@@ -2102,6 +2109,11 @@ int kvm_has_gsi_routing(void)
 int kvm_has_intx_set_mask(void)
 {
     return kvm_state->intx_set_mask;
+}
+
+bool kvm_has_msi_x2apic(void)
+{
+    return kvm_state->msi_x2apic;
 }
 
 void kvm_setup_guest_memory(void *start, size_t size)
