@@ -2058,7 +2058,7 @@ static void pc_machine_class_init(ObjectClass *oc, void *data)
     mc->possible_cpu_arch_ids = pc_possible_cpu_arch_ids;
     mc->default_boot_order = "cad";
     mc->hot_add_cpu = pc_hot_add_cpu;
-    mc->max_cpus = 255;
+    mc->max_cpus = 288;
     mc->reset = pc_machine_reset;
     hc->pre_plug = pc_machine_device_pre_plug_cb;
     hc->plug = pc_machine_device_plug_cb;
