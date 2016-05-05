@@ -738,6 +738,7 @@ static void pc_build_smbios(FWCfgState *fw_cfg)
 
 static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
 {
+    MachineClass *mc = MACHINE_GET_CLASS(pcms);
     FWCfgState *fw_cfg;
     uint64_t *numa_fw_cfg;
     int i, j;
@@ -770,6 +771,11 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
                     sizeof(struct e820_entry) * e820_entries);
 
     fw_cfg_add_bytes(fw_cfg, FW_CFG_HPET, &hpet_cfg, sizeof(hpet_cfg));
+    if (mc->max_cpus > 255) {
+        static uint16_t boot_cpus;
+        boot_cpus = cpu_to_le16(smp_cpus);
+        fw_cfg_add_file(fw_cfg, "etc/boot-cpus", &smp_cpus, sizeof(boot_cpus));
+    }
     /* allocate memory for the NUMA channel: one (64bit) word for the number
      * of nodes, one word for each VCPU->node and one word for each node to
      * hold the amount of memory.
