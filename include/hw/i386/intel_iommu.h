@@ -23,6 +23,10 @@
 #define INTEL_IOMMU_H
 #include "hw/qdev.h"
 #include "sysemu/dma.h"
+#include "hw/i386/ioapic.h"
+#include "hw/pci/msi.h"
+#include "hw/sysbus.h"
+#include "hw/i386/x86-iommu.h"
 
 #define TYPE_INTEL_IOMMU_DEVICE "intel-iommu"
 #define INTEL_IOMMU_DEVICE(obj) \
@@ -34,7 +38,6 @@
 #define VTD_PCI_BUS_MAX             256
 #define VTD_PCI_SLOT_MAX            32
 #define VTD_PCI_FUNC_MAX            8
-#define VTD_PCI_DEVFN_MAX           256
 #define VTD_PCI_SLOT(devfn)         (((devfn) >> 3) & 0x1f)
 #define VTD_PCI_FUNC(devfn)         ((devfn) & 0x07)
 #define VTD_SID_TO_BUS(sid)         (((sid) >> 8) & 0xff)
@@ -44,12 +47,23 @@
 #define VTD_HOST_ADDRESS_WIDTH      39
 #define VTD_HAW_MASK                ((1ULL << VTD_HOST_ADDRESS_WIDTH) - 1)
 
+#define DMAR_REPORT_F_INTR          (1)
+
+#define  VTD_MSI_ADDR_HI_MASK        (0xffffffff00000000ULL)
+#define  VTD_MSI_ADDR_HI_SHIFT       (32)
+#define  VTD_MSI_ADDR_LO_MASK        (0x00000000ffffffffULL)
+
 typedef struct VTDContextEntry VTDContextEntry;
 typedef struct VTDContextCacheEntry VTDContextCacheEntry;
 typedef struct IntelIOMMUState IntelIOMMUState;
 typedef struct VTDAddressSpace VTDAddressSpace;
 typedef struct VTDIOTLBEntry VTDIOTLBEntry;
 typedef struct VTDBus VTDBus;
+typedef union VTD_IRTE VTD_IRTE;
+typedef union VTD_IR_IOAPICEntry VTD_IR_IOAPICEntry;
+typedef union VTD_IR_MSIAddress VTD_IR_MSIAddress;
+typedef struct VTDIrq VTDIrq;
+typedef struct VTD_MSIMessage VTD_MSIMessage;
 
 /* Context-Entry */
 struct VTDContextEntry {
@@ -70,6 +84,7 @@ struct VTDAddressSpace {
     uint8_t devfn;
     AddressSpace as;
     MemoryRegion iommu;
+    MemoryRegion iommu_ir;      /* Interrupt region: 0xfeeXXXXX */
     IntelIOMMUState *iommu_state;
     VTDContextCacheEntry context_cache_entry;
 };
@@ -88,9 +103,126 @@ struct VTDIOTLBEntry {
     bool write_flags;
 };
 
+/* VT-d Source-ID Qualifier types */
+enum {
+    VTD_SQ_FULL = 0x00,     /* Full SID verification */
+    VTD_SQ_IGN_3 = 0x01,    /* Ignore bit 3 */
+    VTD_SQ_IGN_2_3 = 0x02,  /* Ignore bits 2 & 3 */
+    VTD_SQ_IGN_1_3 = 0x03,  /* Ignore bits 1-3 */
+    VTD_SQ_MAX,
+};
+
+/* VT-d Source Validation Types */
+enum {
+    VTD_SVT_NONE = 0x00,    /* No validation */
+    VTD_SVT_ALL = 0x01,     /* Do full validation */
+    VTD_SVT_BUS = 0x02,     /* Validate bus range */
+    VTD_SVT_MAX,
+};
+
+/* Interrupt Remapping Table Entry Definition */
+union VTD_IRTE {
+    struct {
+        uint8_t present:1;          /* Whether entry present/available */
+        uint8_t fault_disable:1;    /* Fault Processing Disable */
+        uint8_t dest_mode:1;        /* Destination Mode */
+        uint8_t redir_hint:1;       /* Redirection Hint */
+        uint8_t trigger_mode:1;     /* Trigger Mode */
+        uint8_t delivery_mode:3;    /* Delivery Mode */
+        uint8_t __avail:4;          /* Available spaces for software */
+        uint8_t __reserved_0:3;     /* Reserved 0 */
+        uint8_t irte_mode:1;        /* IRTE Mode */
+        uint8_t vector:8;           /* Interrupt Vector */
+        uint8_t __reserved_1:8;     /* Reserved 1 */
+        uint32_t dest_id:32;        /* Destination ID */
+        uint16_t source_id:16;      /* Source-ID */
+        uint8_t sid_q:2;            /* Source-ID Qualifier */
+        uint8_t sid_vtype:2;        /* Source-ID Validation Type */
+        uint64_t __reserved_2:44;   /* Reserved 2 */
+    } QEMU_PACKED;
+    uint64_t data[2];
+};
+
+#define VTD_IR_INT_FORMAT_COMPAT     (0) /* Compatible Interrupt */
+#define VTD_IR_INT_FORMAT_REMAP      (1) /* Remappable Interrupt */
+
+/* Programming format for IOAPIC table entries */
+union VTD_IR_IOAPICEntry {
+    struct {
+        uint8_t vector:8;           /* Vector */
+        uint8_t __zeros:3;          /* Reserved (all zero) */
+        uint8_t index_h:1;          /* Interrupt Index bit 15 */
+        uint8_t status:1;           /* Deliver Status */
+        uint8_t polarity:1;         /* Interrupt Polarity */
+        uint8_t remote_irr:1;       /* Remote IRR */
+        uint8_t trigger_mode:1;     /* Trigger Mode */
+        uint8_t mask:1;             /* Mask */
+        uint32_t __reserved:31;     /* Reserved (should all zero) */
+        uint8_t int_mode:1;         /* Interrupt Format */
+        uint16_t index_l:15;        /* Interrupt Index bits 14-0 */
+    } QEMU_PACKED;
+    uint64_t data;
+};
+
+/* Programming format for MSI/MSI-X addresses */
+union VTD_IR_MSIAddress {
+    struct {
+        uint8_t __not_care:2;
+        uint8_t index_h:1;          /* Interrupt index bit 15 */
+        uint8_t sub_valid:1;        /* SHV: Sub-Handle Valid bit */
+        uint8_t int_mode:1;         /* Interrupt format */
+        uint16_t index_l:15;        /* Interrupt index bit 14-0 */
+        uint16_t __head:12;         /* Should always be: 0x0fee */
+    } QEMU_PACKED;
+    uint32_t data;
+};
+
+/* Generic IRQ entry information */
+struct VTDIrq {
+    /* Used by both IOAPIC/MSI interrupt remapping */
+    uint8_t trigger_mode;
+    uint8_t vector;
+    uint8_t delivery_mode;
+    uint32_t dest;
+    uint8_t dest_mode;
+
+    /* only used by MSI interrupt remapping */
+    uint8_t redir_hint;
+    uint8_t msi_addr_last_bits;
+};
+
+struct VTD_MSIMessage {
+    union {
+        struct {
+            uint16_t __not_used:2;
+            uint16_t dest_mode:1;
+            uint16_t redir_hint:1;
+            uint16_t __reserved:8;
+            uint16_t dest:8;
+            uint16_t __addr_head:12; /* 0xfee */
+            uint32_t __addr_hi:32;
+        } QEMU_PACKED;
+        uint64_t msi_addr;
+    };
+    union {
+        struct {
+            uint16_t vector:8;
+            uint16_t delivery_mode:3;
+            uint16_t __resved:3;
+            uint16_t level:1;
+            uint16_t trigger_mode:1;
+            uint16_t __resved1:16;
+        } QEMU_PACKED;
+        uint32_t msi_data;
+    };
+};
+
+/* When IR is enabled, all MSI/MSI-X data bits should be zero */
+#define VTD_IR_MSI_DATA          (0)
+
 /* The iommu (DMAR) device state struct */
 struct IntelIOMMUState {
-    SysBusDevice busdev;
+    X86IOMMUState x86_iommu;
     MemoryRegion csrmem;
     uint8_t csr[DMAR_REG_SIZE];     /* register values */
     uint8_t wmask[DMAR_REG_SIZE];   /* R/W bytes */
@@ -123,11 +255,12 @@ struct IntelIOMMUState {
     MemoryRegionIOMMUOps iommu_ops;
     GHashTable *vtd_as_by_busptr;   /* VTDBus objects indexed by PCIBus* reference */
     VTDBus *vtd_as_by_bus_num[VTD_PCI_BUS_MAX]; /* VTDBus objects indexed by bus number */
-};
 
-/* Find the VTD Address space associated with the given bus pointer,
- * create a new one if none exists
- */
-VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn);
+    /* interrupt remapping */
+    bool intr_enabled;              /* Whether guest enabled IR */
+    dma_addr_t intr_root;           /* Interrupt remapping table pointer */
+    uint32_t intr_size;             /* Number of IR table entries */
+    bool intr_eime;                 /* Extended interrupt mode enabled */
+};
 
 #endif

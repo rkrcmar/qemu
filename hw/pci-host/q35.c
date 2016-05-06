@@ -426,26 +426,27 @@ static void mch_reset(DeviceState *qdev)
 
 static AddressSpace *q35_host_dma_iommu(PCIBus *bus, void *opaque, int devfn)
 {
-    IntelIOMMUState *s = opaque;
-    VTDAddressSpace *vtd_as;
-
-    assert(0 <= devfn && devfn <= VTD_PCI_DEVFN_MAX);
-
-    vtd_as = vtd_find_add_as(s, bus, devfn);
-    return &vtd_as->as;
+    X86IOMMUState *x86_iommu = opaque;
+    X86IOMMUClass *x86_class = X86_IOMMU_GET_CLASS(x86_iommu);
+    assert(0 <= devfn && devfn <= X86_IOMMU_PCI_DEVFN_MAX);
+    return x86_class->find_add_as(x86_iommu, bus, devfn);
 }
 
 static void mch_init_dmar(MCHPCIState *mch)
 {
+    PCMachineState *pcms = PC_MACHINE(qdev_get_machine());
     PCIBus *pci_bus = PCI_BUS(qdev_get_parent_bus(DEVICE(mch)));
 
     mch->iommu = INTEL_IOMMU_DEVICE(qdev_create(NULL, TYPE_INTEL_IOMMU_DEVICE));
-    object_property_add_child(OBJECT(mch), "intel-iommu",
+    object_property_add_child(OBJECT(mch), "x86-iommu",
                               OBJECT(mch->iommu), NULL);
     qdev_init_nofail(DEVICE(mch->iommu));
     sysbus_mmio_map(SYS_BUS_DEVICE(mch->iommu), 0, Q35_HOST_BRIDGE_IOMMU_ADDR);
 
     pci_setup_iommu(pci_bus, q35_host_dma_iommu, mch->iommu);
+    /* Pseudo address space under root PCI bus. */
+    pcms->ioapic_as = q35_host_dma_iommu(pci_bus, mch->iommu,
+                                         Q35_PSEUDO_DEVFN_IOAPIC);
 }
 
 static void mch_realize(PCIDevice *d, Error **errp)
