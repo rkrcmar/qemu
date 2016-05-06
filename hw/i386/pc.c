@@ -695,6 +695,7 @@ static uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index)
         }
         return cpu_index;
     } else {
+if(correct_id == 1) correct_id = 280;
         return correct_id;
     }
 }
