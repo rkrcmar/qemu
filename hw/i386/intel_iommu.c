@@ -2354,7 +2354,7 @@ static void vtd_init(IntelIOMMUState *s)
     s->ecap = VTD_ECAP_QI | VTD_ECAP_IRO;
 
     if (ms->iommu_intr) {
-        s->ecap |= VTD_ECAP_IR | VTD_ECAP_EIM;
+        s->ecap |= VTD_ECAP_IR | VTD_ECAP_EIM | VTD_ECAP_MHMV;
     }
 
     vtd_reset_context_cache(s);
