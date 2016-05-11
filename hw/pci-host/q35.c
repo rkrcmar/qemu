@@ -426,13 +426,11 @@ static void mch_reset(DeviceState *qdev)
 
 static AddressSpace *q35_host_dma_iommu(PCIBus *bus, void *opaque, int devfn)
 {
-    IntelIOMMUState *s = opaque;
-    VTDAddressSpace *vtd_as;
+    X86IOMMUState *x86_iommu = opaque;
+    X86IOMMUClass *x86_class = X86_IOMMU_GET_CLASS(x86_iommu);
 
     assert(0 <= devfn && devfn <= X86_IOMMU_PCI_DEVFN_MAX);
-
-    vtd_as = vtd_find_add_as(s, bus, devfn);
-    return &vtd_as->as;
+    return x86_class->find_add_as(x86_iommu, bus, devfn);
 }
 
 static void mch_init_dmar(MCHPCIState *mch)
@@ -440,7 +438,7 @@ static void mch_init_dmar(MCHPCIState *mch)
     PCIBus *pci_bus = PCI_BUS(qdev_get_parent_bus(DEVICE(mch)));
 
     mch->iommu = INTEL_IOMMU_DEVICE(qdev_create(NULL, TYPE_INTEL_IOMMU_DEVICE));
-    object_property_add_child(OBJECT(mch), "intel-iommu",
+    object_property_add_child(OBJECT(mch), TYPE_X86_IOMMU_DEVICE,
                               OBJECT(mch->iommu), NULL);
     qdev_init_nofail(DEVICE(mch->iommu));
     sysbus_mmio_map(SYS_BUS_DEVICE(mch->iommu), 0, Q35_HOST_BRIDGE_IOMMU_ADDR);

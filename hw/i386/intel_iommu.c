@@ -1971,8 +1971,10 @@ static Property vtd_properties[] = {
 };
 
 
-VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
+static AddressSpace *vtd_find_add_as(X86IOMMUState *x86_iommu, PCIBus *bus,
+                                     int devfn)
 {
+    IntelIOMMUState *s = (IntelIOMMUState *)x86_iommu;
     uintptr_t key = (uintptr_t)bus;
     VTDBus *vtd_bus = g_hash_table_lookup(s->vtd_as_by_busptr, &key);
     VTDAddressSpace *vtd_dev_as;
@@ -2000,7 +2002,7 @@ VTDAddressSpace *vtd_find_add_as(IntelIOMMUState *s, PCIBus *bus, int devfn)
         address_space_init(&vtd_dev_as->as,
                            &vtd_dev_as->iommu, "intel_iommu");
     }
-    return vtd_dev_as;
+    return &vtd_dev_as->as;
 }
 
 /* Do the initialization. It will also be called when reset, so pay
@@ -2128,6 +2130,7 @@ static void vtd_class_init(ObjectClass *klass, void *data)
     dc->vmsd = &vtd_vmstate;
     dc->props = vtd_properties;
     x86_class->realize = vtd_realize;
+    x86_class->find_add_as = vtd_find_add_as;
 }
 
 static const TypeInfo vtd_info = {

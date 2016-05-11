@@ -21,6 +21,7 @@
 #define IOMMU_COMMON_H
 
 #include "hw/sysbus.h"
+#include "exec/memory.h"
 
 #define  TYPE_X86_IOMMU_DEVICE  ("x86-iommu")
 #define  X86_IOMMU_DEVICE(obj) \
@@ -40,6 +41,8 @@ struct X86IOMMUClass {
     SysBusDeviceClass parent;
     /* Intel/AMD specific realize() hook */
     DeviceRealize realize;
+    /* Find/Add IOMMU address space for specific PCI device */
+    AddressSpace *(*find_add_as)(X86IOMMUState *s, PCIBus *bus, int devfn);
 };
 
 struct X86IOMMUState {
