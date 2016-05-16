@@ -15,6 +15,7 @@
 #define PCI_DEVFN(slot, func)   ((((slot) & 0x1f) << 3) | ((func) & 0x07))
 #define PCI_SLOT(devfn)         (((devfn) >> 3) & 0x1f)
 #define PCI_FUNC(devfn)         ((devfn) & 0x07)
+#define PCI_BUILD_BDF(bus, devfn)     ((bus << 8) | (devfn))
 #define PCI_SLOT_MAX            32
 #define PCI_FUNC_MAX            8
 
@@ -685,10 +686,12 @@ static inline uint32_t pci_config_size(const PCIDevice *d)
     return pci_is_express(d) ? PCIE_CONFIG_SPACE_SIZE : PCI_CONFIG_SPACE_SIZE;
 }
 
-static inline uint16_t pci_requester_id(PCIDevice *dev)
+static inline uint16_t pci_get_bdf(PCIDevice *dev)
 {
-    return (pci_bus_num(dev->bus) << 8) | dev->devfn;
+    return PCI_BUILD_BDF(pci_bus_num(dev->bus), dev->devfn);
 }
+
+uint16_t pci_requester_id(PCIDevice *dev);
 
 /* DMA access functions */
 static inline AddressSpace *pci_get_address_space(PCIDevice *dev)

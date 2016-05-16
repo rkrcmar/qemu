@@ -2498,6 +2498,35 @@ PCIDevice *pci_get_function_0(PCIDevice *pci_dev)
     }
 }
 
+/* Parse bridges up to the root complex and get final Requester ID
+ * for this device.  For PCIe-all topology, this works exactly as
+ * pci_get_bdf() does. However, several tricks are required for
+ * legacy PCI topology and PCIe-to-PCI bridges, to be better aligned
+ * with spec. */
+uint16_t pci_requester_id(PCIDevice *dev)
+{
+    uint8_t bus_n;
+    uint16_t result = pci_get_bdf(dev);
+    while ((bus_n = pci_bus_num(dev->bus))) {
+        /* We are under PCI/PCIe bridges */
+        dev = dev->bus->parent_dev;
+        if (pci_is_express(dev)) {
+            if (pcie_cap_get_type(dev) == PCI_EXP_TYPE_PCI_BRIDGE) {
+                /* When we pass through PCIe-to-PCI/PCIX bridges, we
+                 * override the requester ID using secondary bus
+                 * number with zeroed devfn (pcie-to-pci bridge spec
+                 * chap 2.3). */
+                result = PCI_BUILD_BDF(bus_n, 0);
+            }
+        } else {
+            /* Legacy PCI bus, override requester ID with the
+             * bridge's BDF upstream. */
+            result = pci_get_bdf(dev);
+        }
+    }
+    return result;
+}
+
 static const TypeInfo pci_device_type_info = {
     .name = TYPE_PCI_DEVICE,
     .parent = TYPE_DEVICE,
