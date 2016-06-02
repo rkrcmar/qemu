@@ -259,7 +259,7 @@ static void pc_init1(MachineState *machine,
         smbus = piix4_pm_init(pci_bus, piix3_devfn + 3, 0xb100,
                               gsi[9], smi_irq,
                               pc_machine_is_smm_enabled(pcms),
-                              &piix4_pm);
+                              &piix4_pm, machine->cpu_hotplug);
         smbus_eeprom_init(smbus, 8, NULL, 0);
 
         object_property_add_link(OBJECT(machine), PC_MACHINE_ACPI_DEVICE_PROP,
@@ -409,6 +409,7 @@ static void pc_xen_hvm_init(MachineState *machine)
 
 static void pc_i440fx_machine_options(MachineClass *m)
 {
+    m->max_cpus = 255;
     m->family = "pc_piix";
     m->desc = "Standard PC (i440FX + PIIX, 1996)";
     m->hot_add_cpu = pc_hot_add_cpu;
@@ -416,11 +417,23 @@ static void pc_i440fx_machine_options(MachineClass *m)
     m->default_display = "std";
 }
 
-static void pc_i440fx_2_6_machine_options(MachineClass *m)
+static void pc_i440fx_2_7_machine_options(MachineClass *m)
 {
     pc_i440fx_machine_options(m);
     m->alias = "pc";
     m->is_default = 1;
+}
+
+DEFINE_I440FX_MACHINE(v2_7, "pc-i440fx-2.7", NULL,
+                      pc_i440fx_2_7_machine_options);
+
+
+static void pc_i440fx_2_6_machine_options(MachineClass *m)
+{
+    pc_i440fx_2_7_machine_options(m);
+    m->is_default = 0;
+    m->alias = NULL;
+    SET_MACHINE_COMPAT(m, PC_COMPAT_2_6);
 }
 
 DEFINE_I440FX_MACHINE(v2_6, "pc-i440fx-2.6", NULL,
@@ -431,8 +444,6 @@ static void pc_i440fx_2_5_machine_options(MachineClass *m)
 {
     PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
     pc_i440fx_2_6_machine_options(m);
-    m->alias = NULL;
-    m->is_default = 0;
     pcmc->save_tsc_khz = false;
     m->legacy_fw_cfg_order = 1;
     SET_MACHINE_COMPAT(m, PC_COMPAT_2_5);

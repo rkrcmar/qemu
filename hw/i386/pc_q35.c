@@ -171,15 +171,16 @@ static void pc_q35_init(MachineState *machine)
     host_bus = phb->bus;
     pcms->bus = phb->bus;
     /* create ISA bus */
-    lpc = pci_create_simple_multifunction(host_bus, PCI_DEVFN(ICH9_LPC_DEV,
-                                          ICH9_LPC_FUNC), true,
-                                          TYPE_ICH9_LPC_DEVICE);
+    lpc = pci_create_multifunction(host_bus, PCI_DEVFN(ICH9_LPC_DEV,
+                                   ICH9_LPC_FUNC), true, TYPE_ICH9_LPC_DEVICE);
+    qdev_prop_set_bit(DEVICE(lpc), "cpu-hotplug", machine->cpu_hotplug);
 
     object_property_add_link(OBJECT(machine), PC_MACHINE_ACPI_DEVICE_PROP,
                              TYPE_HOTPLUG_HANDLER,
                              (Object **)&pcms->acpi_dev,
                              object_property_allow_set_link,
                              OBJ_PROP_LINK_UNREF_ON_RELEASE, &error_abort);
+    qdev_init_nofail(DEVICE(lpc));
     object_property_set_link(OBJECT(machine), OBJECT(lpc),
                              PC_MACHINE_ACPI_DEVICE_PROP, &error_abort);
 
@@ -283,10 +284,21 @@ static void pc_q35_machine_options(MachineClass *m)
     m->no_floppy = 1;
 }
 
-static void pc_q35_2_6_machine_options(MachineClass *m)
+static void pc_q35_2_7_machine_options(MachineClass *m)
 {
     pc_q35_machine_options(m);
     m->alias = "q35";
+}
+
+DEFINE_Q35_MACHINE(v2_7, "pc-q35-2.7", NULL,
+                   pc_q35_2_7_machine_options);
+
+static void pc_q35_2_6_machine_options(MachineClass *m)
+{
+    pc_q35_2_7_machine_options(m);
+    m->alias = NULL;
+    m->max_cpus = 255;
+    SET_MACHINE_COMPAT(m, PC_COMPAT_2_6);
 }
 
 DEFINE_Q35_MACHINE(v2_6, "pc-q35-2.6", NULL,
@@ -296,7 +308,6 @@ static void pc_q35_2_5_machine_options(MachineClass *m)
 {
     PCMachineClass *pcmc = PC_MACHINE_CLASS(m);
     pc_q35_2_6_machine_options(m);
-    m->alias = NULL;
     pcmc->save_tsc_khz = false;
     m->legacy_fw_cfg_order = 1;
     SET_MACHINE_COMPAT(m, PC_COMPAT_2_5);

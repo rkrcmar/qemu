@@ -695,6 +695,7 @@ static uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index)
         }
         return cpu_index;
     } else {
+if(correct_id == 1) correct_id = 280;
         return correct_id;
     }
 }
@@ -738,6 +739,7 @@ static void pc_build_smbios(FWCfgState *fw_cfg)
 
 static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
 {
+    MachineClass *mc = MACHINE_GET_CLASS(pcms);
     FWCfgState *fw_cfg;
     uint64_t *numa_fw_cfg;
     int i, j;
@@ -746,17 +748,15 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
 
     /* FW_CFG_MAX_CPUS is a bit confusing/problematic on x86:
      *
-     * SeaBIOS needs FW_CFG_MAX_CPUS for CPU hotplug, but the CPU hotplug
-     * QEMU<->SeaBIOS interface is not based on the "CPU index", but on the APIC
-     * ID of hotplugged CPUs[1]. This means that FW_CFG_MAX_CPUS is not the
-     * "maximum number of CPUs", but the "limit to the APIC ID values SeaBIOS
-     * may see".
+     * For machine types prior to 1.8, SeaBIOS needs FW_CFG_MAX_CPUS for
+     * building MPTable, ACPI MADT, ACPI CPU hotplug and ACPI SRAT table,
+     * that tables are based on xAPIC ID and QEMU<->SeaBIOS interface
+     * for CPU hotplug also uses APIC ID and not "CPU index".
+     * This means that FW_CFG_MAX_CPUS is not the "maximum number of CPUs",
+     * but the "limit to the APIC ID values SeaBIOS may see".
      *
-     * So, this means we must not use max_cpus, here, but the maximum possible
-     * APIC ID value, plus one.
-     *
-     * [1] The only kind of "CPU identifier" used between SeaBIOS and QEMU is
-     *     the APIC ID, not the "CPU index"
+     * So for compatibility reasons with old BIOSes we are stuck with
+     * "etc/max-cpus" actually being apic_id_limit
      */
     fw_cfg_add_i16(fw_cfg, FW_CFG_MAX_CPUS, (uint16_t)pcms->apic_id_limit);
     fw_cfg_add_i64(fw_cfg, FW_CFG_RAM_SIZE, (uint64_t)ram_size);
@@ -772,6 +772,11 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
                     sizeof(struct e820_entry) * e820_entries);
 
     fw_cfg_add_bytes(fw_cfg, FW_CFG_HPET, &hpet_cfg, sizeof(hpet_cfg));
+    if (mc->max_cpus > 255) {
+        static uint16_t boot_cpus;
+        boot_cpus = cpu_to_le16(smp_cpus);
+        fw_cfg_add_file(fw_cfg, "etc/boot-cpus", &smp_cpus, sizeof(boot_cpus));
+    }
     /* allocate memory for the NUMA channel: one (64bit) word for the number
      * of nodes, one word for each VCPU->node and one word for each node to
      * hold the amount of memory.
@@ -780,7 +785,6 @@ static FWCfgState *bochs_bios_init(AddressSpace *as, PCMachineState *pcms)
     numa_fw_cfg[0] = cpu_to_le64(nb_numa_nodes);
     for (i = 0; i < max_cpus; i++) {
         unsigned int apic_id = x86_cpu_apic_id_from_index(i);
-        assert(apic_id < pcms->apic_id_limit);
         for (j = 0; j < nb_numa_nodes; j++) {
             if (test_bit(i, numa_info[j].node_cpu)) {
                 numa_fw_cfg[apic_id + 1] = cpu_to_le64(j);
@@ -1063,6 +1067,9 @@ out:
     return cpu;
 }
 
+static void pc_machine_device_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                                DeviceState *dev, Error **errp);
+
 void pc_hot_add_cpu(const int64_t id, Error **errp)
 {
     X86CPU *cpu;
@@ -1076,6 +1083,11 @@ void pc_hot_add_cpu(const int64_t id, Error **errp)
     }
 
     if (cpu_exists(apic_id)) {
+        DeviceState *dev = DEVICE(cpu_exists(apic_id));
+        pc_machine_device_unplug_request_cb(
+            qdev_get_hotplug_handler(dev),
+            dev,
+            &local_err);
         error_setg(errp, "Unable to add CPU: %" PRIi64
                    ", it already exists", id);
         return;
@@ -1104,7 +1116,7 @@ void pc_hot_add_cpu(const int64_t id, Error **errp)
 
 void pc_cpus_init(PCMachineState *pcms)
 {
-    int i;
+    int i, j;
     X86CPU *cpu = NULL;
     MachineState *machine = MACHINE(pcms);
 
@@ -1125,17 +1137,21 @@ void pc_cpus_init(PCMachineState *pcms)
      * This is used for FW_CFG_MAX_CPUS. See comments on bochs_bios_init().
      */
     pcms->apic_id_limit = x86_cpu_apic_id_from_index(max_cpus - 1) + 1;
-    if (pcms->apic_id_limit > ACPI_CPU_HOTPLUG_ID_LIMIT) {
-        error_report("max_cpus is too large. APIC ID of last CPU is %u",
-                     pcms->apic_id_limit - 1);
-        exit(1);
-    }
-
     pcms->possible_cpus = g_malloc0(sizeof(CPUArchIdList) +
                                     sizeof(CPUArchId) * max_cpus);
+    pcms->node_cpu = g_malloc0(max_cpus * sizeof *pcms->node_cpu);
+
     for (i = 0; i < max_cpus; i++) {
         pcms->possible_cpus->cpus[i].arch_id = x86_cpu_apic_id_from_index(i);
         pcms->possible_cpus->len++;
+
+        for (j = 0; j < nb_numa_nodes; j++) {
+            if (test_bit(i, numa_info[j].node_cpu)) {
+                pcms->node_cpu[i] = j;
+                break;
+            }
+        }
+
         if (i < smp_cpus) {
             cpu = pc_new_cpu(machine->cpu_model, x86_cpu_apic_id_from_index(i),
                              &error_fatal);
@@ -1185,7 +1201,7 @@ void pc_machine_done(Notifier *notifier, void *data)
 
 void pc_guest_info_init(PCMachineState *pcms)
 {
-    int i, j;
+    int i;
 
     pcms->apic_xrupt_override = kvm_allows_irq0_override();
     pcms->numa_nodes = nb_numa_nodes;
@@ -1193,20 +1209,6 @@ void pc_guest_info_init(PCMachineState *pcms)
                                     sizeof *pcms->node_mem);
     for (i = 0; i < nb_numa_nodes; i++) {
         pcms->node_mem[i] = numa_info[i].node_mem;
-    }
-
-    pcms->node_cpu = g_malloc0(pcms->apic_id_limit *
-                                     sizeof *pcms->node_cpu);
-
-    for (i = 0; i < max_cpus; i++) {
-        unsigned int apic_id = x86_cpu_apic_id_from_index(i);
-        assert(apic_id < pcms->apic_id_limit);
-        for (j = 0; j < nb_numa_nodes; j++) {
-            if (test_bit(i, numa_info[j].node_cpu)) {
-                pcms->node_cpu[apic_id] = j;
-                break;
-            }
-        }
     }
 
     pcms->machine_done.notify = pc_machine_done;
@@ -1676,11 +1678,27 @@ static int pc_apic_cmp(const void *a, const void *b)
    return apic_a->arch_id - apic_b->arch_id;
 }
 
+static
+CPUArchId *pc_find_possible_cpu(PCMachineState *pcms, CPUState *cpu, int *idx)
+{
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+    CPUArchId apic_id, *found_cpu;
+
+    apic_id.arch_id = cc->get_arch_id(CPU(cpu));
+    found_cpu = bsearch(&apic_id, pcms->possible_cpus->cpus,
+        pcms->possible_cpus->len, sizeof(*pcms->possible_cpus->cpus),
+        pc_apic_cmp);
+    assert(found_cpu);
+    if (idx) {
+        *idx = found_cpu - pcms->possible_cpus->cpus;
+    }
+    return found_cpu;
+}
+
 static void pc_cpu_plug(HotplugHandler *hotplug_dev,
                         DeviceState *dev, Error **errp)
 {
-    CPUClass *cc = CPU_GET_CLASS(dev);
-    CPUArchId apic_id, *found_cpu;
+    CPUArchId *found_cpu;
     HotplugHandlerClass *hhc;
     Error *local_err = NULL;
     PCMachineState *pcms = PC_MACHINE(hotplug_dev);
@@ -1704,14 +1722,69 @@ static void pc_cpu_plug(HotplugHandler *hotplug_dev,
     /* increment the number of CPUs */
     rtc_set_memory(pcms->rtc, 0x5f, rtc_get_memory(pcms->rtc, 0x5f) + 1);
 
-    apic_id.arch_id = cc->get_arch_id(CPU(dev));
-    found_cpu = bsearch(&apic_id, pcms->possible_cpus->cpus,
-        pcms->possible_cpus->len, sizeof(*pcms->possible_cpus->cpus),
-        pc_apic_cmp);
-    assert(found_cpu);
+    found_cpu = pc_find_possible_cpu(pcms, CPU(dev), NULL);
     found_cpu->cpu = CPU(dev);
 out:
     error_propagate(errp, local_err);
+}
+static void pc_cpu_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                     DeviceState *dev, Error **errp)
+{
+    HotplugHandlerClass *hhc;
+    Error *local_err = NULL;
+    PCMachineState *pcms = PC_MACHINE(hotplug_dev);
+
+    hhc = HOTPLUG_HANDLER_GET_CLASS(pcms->acpi_dev);
+    hhc->unplug_request(HOTPLUG_HANDLER(pcms->acpi_dev), dev, &local_err);
+
+    if (local_err) {
+        goto out;
+    }
+
+ out:
+    error_propagate(errp, local_err);
+
+}
+
+static void pc_cpu_unplug_cb(HotplugHandler *hotplug_dev,
+                             DeviceState *dev, Error **errp)
+{
+    HotplugHandlerClass *hhc;
+    Error *local_err = NULL;
+    PCMachineState *pcms = PC_MACHINE(hotplug_dev);
+
+    hhc = HOTPLUG_HANDLER_GET_CLASS(pcms->acpi_dev);
+    hhc->unplug(HOTPLUG_HANDLER(pcms->acpi_dev), dev, &local_err);
+
+    if (local_err) {
+        goto out;
+    }
+
+    /*
+     * TODO: enable unplug once generic CPU remove bits land
+     * for now guest will be able to eject CPU ACPI wise but
+     * it will come back again on machine reset.
+     */
+    /*  object_unparent(OBJECT(dev)); */
+
+ out:
+    error_propagate(errp, local_err);
+}
+
+static void pc_machine_device_pre_plug_cb(HotplugHandler *hotplug_dev,
+                                          DeviceState *dev, Error **errp)
+{
+    PCMachineState *pcms = PC_MACHINE(hotplug_dev);
+
+    if (object_dynamic_cast(OBJECT(dev), TYPE_CPU)) {
+        if (nb_numa_nodes) {
+            int idx;
+
+            pc_find_possible_cpu(pcms, CPU(dev), &idx);
+            object_property_set_int(OBJECT(dev), pcms->node_cpu[idx], "node",
+                                    errp);
+        }
+    }
 }
 
 static void pc_machine_device_plug_cb(HotplugHandler *hotplug_dev,
@@ -1729,6 +1802,8 @@ static void pc_machine_device_unplug_request_cb(HotplugHandler *hotplug_dev,
 {
     if (object_dynamic_cast(OBJECT(dev), TYPE_PC_DIMM)) {
         pc_dimm_unplug_request(hotplug_dev, dev, errp);
+    } else if (object_dynamic_cast(OBJECT(dev), TYPE_CPU)) {
+        pc_cpu_unplug_request_cb(hotplug_dev, dev, errp);
     } else {
         error_setg(errp, "acpi: device unplug request for not supported device"
                    " type: %s", object_get_typename(OBJECT(dev)));
@@ -1740,6 +1815,8 @@ static void pc_machine_device_unplug_cb(HotplugHandler *hotplug_dev,
 {
     if (object_dynamic_cast(OBJECT(dev), TYPE_PC_DIMM)) {
         pc_dimm_unplug(hotplug_dev, dev, errp);
+    } else if (object_dynamic_cast(OBJECT(dev), TYPE_CPU)) {
+        pc_cpu_unplug_cb(hotplug_dev, dev, errp);
     } else {
         error_setg(errp, "acpi: device unplug for not supported device"
                    " type: %s", object_get_typename(OBJECT(dev)));
@@ -1988,8 +2065,9 @@ static void pc_machine_class_init(ObjectClass *oc, void *data)
     mc->possible_cpu_arch_ids = pc_possible_cpu_arch_ids;
     mc->default_boot_order = "cad";
     mc->hot_add_cpu = pc_hot_add_cpu;
-    mc->max_cpus = 255;
+    mc->max_cpus = 288;
     mc->reset = pc_machine_reset;
+    hc->pre_plug = pc_machine_device_pre_plug_cb;
     hc->plug = pc_machine_device_plug_cb;
     hc->unplug_request = pc_machine_device_unplug_request_cb;
     hc->unplug = pc_machine_device_unplug_cb;

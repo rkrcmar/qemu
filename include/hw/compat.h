@@ -1,6 +1,18 @@
 #ifndef HW_COMPAT_H
 #define HW_COMPAT_H
 
+#define HW_COMPAT_2_6 \
+    {\
+        .driver   = "PIIX4_PM",\
+        .property = "cpu-hotplug-legacy",\
+        .value    = "on",\
+    },\
+    {\
+        .driver   = "ICH9-LPC",\
+        .property = "cpu-hotplug-legacy",\
+        .value    = "on",\
+    },\
+
 #define HW_COMPAT_2_5 \
     {\
         .driver   = "isa-fdc",\

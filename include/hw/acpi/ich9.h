@@ -23,6 +23,7 @@
 
 #include "hw/acpi/acpi.h"
 #include "hw/acpi/cpu_hotplug.h"
+#include "hw/acpi/cpu.h"
 #include "hw/acpi/memory_hotplug.h"
 #include "hw/acpi/acpi_dev_interface.h"
 #include "hw/acpi/tco.h"
@@ -48,7 +49,11 @@ typedef struct ICH9LPCPMRegs {
     uint32_t pm_io_base;
     Notifier powerdown_notifier;
 
-    AcpiCpuHotplug gpe_cpu;
+    bool cpu_hotplug_legacy;
+    union {
+        AcpiCpuHotplug legacy; /* used for keeping legacy state */
+        CPUHotplugState state;
+    } cpuhp;
 
     MemHotplugState acpi_memory_hotplug;
 
@@ -69,10 +74,11 @@ extern const VMStateDescription vmstate_ich9_pm;
 
 void ich9_pm_add_properties(Object *obj, ICH9LPCPMRegs *pm, Error **errp);
 
-void ich9_pm_device_plug_cb(ICH9LPCPMRegs *pm, DeviceState *dev, Error **errp);
-void ich9_pm_device_unplug_request_cb(ICH9LPCPMRegs *pm, DeviceState *dev,
-                                      Error **errp);
-void ich9_pm_device_unplug_cb(ICH9LPCPMRegs *pm, DeviceState *dev,
+void ich9_pm_device_plug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
+                            Error **errp);
+void ich9_pm_device_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                      DeviceState *dev, Error **errp);
+void ich9_pm_device_unplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
                               Error **errp);
 
 void ich9_pm_ospm_status(AcpiDeviceIf *adev, ACPIOSTInfoList ***list);

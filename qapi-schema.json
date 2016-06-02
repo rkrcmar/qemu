@@ -4019,7 +4019,7 @@
 #
 # @DIMM: memory slot
 #
-{ 'enum': 'ACPISlotType', 'data': [ 'DIMM' ] }
+{ 'enum': 'ACPISlotType', 'data': [ 'DIMM', 'CPU' ] }
 
 ## @ACPIOSTInfo
 #
