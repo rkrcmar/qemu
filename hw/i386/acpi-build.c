@@ -2342,26 +2342,6 @@ build_tpm2(GArray *table_data, GArray *linker)
                  (void *)tpm2_ptr, "TPM2", sizeof(*tpm2_ptr), 4, NULL, NULL);
 }
 
-typedef enum {
-    MEM_AFFINITY_NOFLAGS      = 0,
-    MEM_AFFINITY_ENABLED      = (1 << 0),
-    MEM_AFFINITY_HOTPLUGGABLE = (1 << 1),
-    MEM_AFFINITY_NON_VOLATILE = (1 << 2),
-} MemoryAffinityFlags;
-
-static void
-acpi_build_srat_memory(AcpiSratMemoryAffinity *numamem, uint64_t base,
-                       uint64_t len, int node, MemoryAffinityFlags flags)
-{
-    numamem->type = ACPI_SRAT_MEMORY;
-    numamem->length = sizeof(*numamem);
-    memset(numamem->proximity, 0, 4);
-    numamem->proximity[0] = node;
-    numamem->flags = cpu_to_le32(flags);
-    numamem->base_addr = cpu_to_le64(base);
-    numamem->range_length = cpu_to_le64(len);
-}
-
 static void
 build_srat(GArray *table_data, GArray *linker, MachineState *machine)
 {
@@ -2394,7 +2374,7 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
             core->type = ACPI_SRAT_PROCESSOR;
             core->length = sizeof(*core);
             core->local_apic_id = apic_id;
-            curnode = pcms->node_cpu[i];
+            curnode = pcms->node_cpu[apic_id];
             core->proximity_lo = curnode;
             memset(core->proximity_hi, 0, 3);
             core->local_sapic_eid = 0;
@@ -2419,7 +2399,7 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
     numa_start = table_data->len;
 
     numamem = acpi_data_push(table_data, sizeof *numamem);
-    acpi_build_srat_memory(numamem, 0, 640*1024, 0, MEM_AFFINITY_ENABLED);
+    build_srat_memory(numamem, 0, 640 * 1024, 0, MEM_AFFINITY_ENABLED);
     next_base = 1024 * 1024;
     for (i = 1; i < pcms->numa_nodes + 1; ++i) {
         mem_base = next_base;
@@ -2435,21 +2415,21 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
             mem_len -= next_base - pcms->below_4g_mem_size;
             if (mem_len > 0) {
                 numamem = acpi_data_push(table_data, sizeof *numamem);
-                acpi_build_srat_memory(numamem, mem_base, mem_len, i - 1,
-                                       MEM_AFFINITY_ENABLED);
+                build_srat_memory(numamem, mem_base, mem_len, i - 1,
+                                  MEM_AFFINITY_ENABLED);
             }
             mem_base = 1ULL << 32;
             mem_len = next_base - pcms->below_4g_mem_size;
             next_base += (1ULL << 32) - pcms->below_4g_mem_size;
         }
         numamem = acpi_data_push(table_data, sizeof *numamem);
-        acpi_build_srat_memory(numamem, mem_base, mem_len, i - 1,
-                               MEM_AFFINITY_ENABLED);
+        build_srat_memory(numamem, mem_base, mem_len, i - 1,
+                          MEM_AFFINITY_ENABLED);
     }
     slots = (table_data->len - numa_start) / sizeof *numamem;
     for (; slots < pcms->numa_nodes + 2; slots++) {
         numamem = acpi_data_push(table_data, sizeof *numamem);
-        acpi_build_srat_memory(numamem, 0, 0, 0, MEM_AFFINITY_NOFLAGS);
+        build_srat_memory(numamem, 0, 0, 0, MEM_AFFINITY_NOFLAGS);
     }
 
     /*
@@ -2459,10 +2439,9 @@ build_srat(GArray *table_data, GArray *linker, MachineState *machine)
      */
     if (hotplugabble_address_space_size) {
         numamem = acpi_data_push(table_data, sizeof *numamem);
-        acpi_build_srat_memory(numamem, pcms->hotplug_memory.base,
-                               hotplugabble_address_space_size, 0,
-                               MEM_AFFINITY_HOTPLUGGABLE |
-                               MEM_AFFINITY_ENABLED);
+        build_srat_memory(numamem, pcms->hotplug_memory.base,
+                          hotplugabble_address_space_size, 0,
+                          MEM_AFFINITY_HOTPLUGGABLE | MEM_AFFINITY_ENABLED);
     }
 
     build_header(linker, table_data,

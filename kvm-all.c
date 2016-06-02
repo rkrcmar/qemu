@@ -413,7 +413,7 @@ static int kvm_physical_sync_dirty_bitmap(KVMMemoryListener *kml,
          * userspace memory corruption (which is not detectable by valgrind
          * too, in most cases).
          * So for now, let's align to 64 instead of HOST_LONG_BITS here, in
-         * a hope that sizeof(long) wont become >8 any time soon.
+         * a hope that sizeof(long) won't become >8 any time soon.
          */
         size = ALIGN(((mem->memory_size) >> TARGET_PAGE_BITS),
                      /*HOST_LONG_BITS*/ 64) / 8;
@@ -1457,6 +1457,12 @@ static int kvm_max_vcpus(KVMState *s)
 {
     int ret = kvm_check_extension(s, KVM_CAP_MAX_VCPUS);
     return (ret) ? ret : kvm_recommended_vcpus(s);
+}
+
+bool kvm_vcpu_id_is_valid(int vcpu_id)
+{
+    KVMState *s = KVM_STATE(current_machine->accelerator);
+    return vcpu_id >= 0 && vcpu_id < kvm_max_vcpus(s);
 }
 
 static int kvm_init(MachineState *ms)

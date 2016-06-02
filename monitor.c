@@ -23,6 +23,8 @@
  */
 #include "qemu/osdep.h"
 #include <dirent.h>
+#include "qemu-common.h"
+#include "cpu.h"
 #include "hw/hw.h"
 #include "monitor/qdev.h"
 #include "hw/usb.h"
@@ -69,6 +71,8 @@
 #include "trace/simple.h"
 #endif
 #include "exec/memory.h"
+#include "exec/exec-all.h"
+#include "qemu/log.h"
 #include "qmp-commands.h"
 #include "hmp.h"
 #include "qemu/thread.h"
@@ -3427,11 +3431,13 @@ void host_net_remove_completion(ReadLineState *rs, int nb_args, const char *str)
 static void vm_completion(ReadLineState *rs, const char *str)
 {
     size_t len;
-    BlockDriverState *bs = NULL;
+    BlockDriverState *bs;
+    BdrvNextIterator it;
 
     len = strlen(str);
     readline_set_completion_index(rs, len);
-    while ((bs = bdrv_next(bs))) {
+
+    for (bs = bdrv_first(&it); bs; bs = bdrv_next(&it)) {
         SnapshotInfoList *snapshots, *snapshot;
         AioContext *ctx = bdrv_get_aio_context(bs);
         bool ok = false;

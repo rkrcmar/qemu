@@ -26,6 +26,8 @@
  * THE SOFTWARE.
  */
 #include "qemu/osdep.h"
+#include "qemu-common.h"
+#include "cpu.h"
 #include <zlib.h>
 #include "qapi-event.h"
 #include "qemu/cutils.h"
@@ -427,10 +429,8 @@ static size_t save_page_header(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
 static void mig_throttle_guest_down(void)
 {
     MigrationState *s = migrate_get_current();
-    uint64_t pct_initial =
-            s->parameters[MIGRATION_PARAMETER_X_CPU_THROTTLE_INITIAL];
-    uint64_t pct_icrement =
-            s->parameters[MIGRATION_PARAMETER_X_CPU_THROTTLE_INCREMENT];
+    uint64_t pct_initial = s->parameters.cpu_throttle_initial;
+    uint64_t pct_icrement = s->parameters.cpu_throttle_increment;
 
     /* We have not started throttling yet. Let's start it. */
     if (!cpu_throttle_active()) {
@@ -1272,7 +1272,7 @@ static int ram_save_target_page(MigrationState *ms, QEMUFile *f,
 }
 
 /**
- * ram_save_host_page: Starting at *offset send pages upto the end
+ * ram_save_host_page: Starting at *offset send pages up to the end
  *                     of the current host page.  It's valid for the initial
  *                     offset to point into the middle of a host page
  *                     in which case the remainder of the hostpage is sent.
@@ -2476,7 +2476,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                     if (length != block->used_length) {
                         Error *local_err = NULL;
 
-                        ret = qemu_ram_resize(block->offset, length,
+                        ret = qemu_ram_resize(block, length,
                                               &local_err);
                         if (local_err) {
                             error_report_err(local_err);

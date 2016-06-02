@@ -82,7 +82,7 @@ struct BlockJob {
     const BlockJobDriver *driver;
 
     /** The block device on which the job is operating.  */
-    BlockDriverState *bs;
+    BlockBackend *blk;
 
     /**
      * The ID of the block job. Currently the BlockBackend name of the BDS
@@ -135,6 +135,9 @@ struct BlockJob {
      */
     bool deferred_to_main_loop;
 
+    /** Element of the list of block jobs */
+    QLIST_ENTRY(BlockJob) job_list;
+
     /** Status that is published by the query-block-jobs QMP API */
     BlockDeviceIoStatus iostatus;
 
@@ -171,6 +174,17 @@ struct BlockJob {
     BlockJobTxn *txn;
     QLIST_ENTRY(BlockJob) txn_list;
 };
+
+/**
+ * block_job_next:
+ * @job: A block job, or %NULL.
+ *
+ * Get the next element from the list of block jobs after @job, or the
+ * first one if @job is %NULL.
+ *
+ * Returns the requested job, or %NULL if there are no more jobs left.
+ */
+BlockJob *block_job_next(BlockJob *job);
 
 /**
  * block_job_create:
@@ -357,6 +371,13 @@ bool block_job_is_paused(BlockJob *job);
 int block_job_cancel_sync(BlockJob *job);
 
 /**
+ * block_job_cancel_sync_all:
+ *
+ * Synchronously cancels all jobs using block_job_cancel_sync().
+ */
+void block_job_cancel_sync_all(void);
+
+/**
  * block_job_complete_sync:
  * @job: The job to be completed.
  * @errp: Error object which may be set by block_job_complete(); this is not
@@ -383,7 +404,6 @@ void block_job_iostatus_reset(BlockJob *job);
 /**
  * block_job_error_action:
  * @job: The job to signal an error for.
- * @bs: The block device on which to set an I/O error.
  * @on_err: The error action setting.
  * @is_read: Whether the operation was a read.
  * @error: The error that was reported.
@@ -391,8 +411,7 @@ void block_job_iostatus_reset(BlockJob *job);
  * Report an I/O error for a block job and possibly stop the VM.  Return the
  * action that was selected based on @on_err and @error.
  */
-BlockErrorAction block_job_error_action(BlockJob *job, BlockDriverState *bs,
-                                        BlockdevOnError on_err,
+BlockErrorAction block_job_error_action(BlockJob *job, BlockdevOnError on_err,
                                         int is_read, int error);
 
 typedef void BlockJobDeferToMainLoopFn(BlockJob *job, void *opaque);

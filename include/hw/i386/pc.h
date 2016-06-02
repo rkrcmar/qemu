@@ -369,9 +369,29 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     PC_COMPAT_2_6 \
     HW_COMPAT_2_5
 
+/* Helper for setting model-id for CPU models that changed model-id
+ * depending on QEMU versions up to QEMU 2.4.
+ */
+#define PC_CPU_MODEL_IDS(v) \
+    {\
+        .driver   = "qemu32-" TYPE_X86_CPU,\
+        .property = "model-id",\
+        .value    = "QEMU Virtual CPU version " v,\
+    },\
+    {\
+        .driver   = "qemu64-" TYPE_X86_CPU,\
+        .property = "model-id",\
+        .value    = "QEMU Virtual CPU version " v,\
+    },\
+    {\
+        .driver   = "athlon-" TYPE_X86_CPU,\
+        .property = "model-id",\
+        .value    = "QEMU Virtual CPU version " v,\
+    },
+
 #define PC_COMPAT_2_4 \
-    PC_COMPAT_2_5 \
     HW_COMPAT_2_4 \
+    PC_CPU_MODEL_IDS("2.4.0") \
     {\
         .driver   = "Haswell-" TYPE_X86_CPU,\
         .property = "abm",\
@@ -441,8 +461,8 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
 
 
 #define PC_COMPAT_2_3 \
-    PC_COMPAT_2_4 \
     HW_COMPAT_2_3 \
+    PC_CPU_MODEL_IDS("2.3.0") \
     {\
         .driver   = TYPE_X86_CPU,\
         .property = "arat",\
@@ -522,8 +542,8 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_2_2 \
-    PC_COMPAT_2_3 \
     HW_COMPAT_2_2 \
+    PC_CPU_MODEL_IDS("2.3.0") \
     {\
         .driver = "kvm64" "-" TYPE_X86_CPU,\
         .property = "vme",\
@@ -616,8 +636,8 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_2_1 \
-    PC_COMPAT_2_2 \
     HW_COMPAT_2_1 \
+    PC_CPU_MODEL_IDS("2.1.0") \
     {\
         .driver = "coreduo" "-" TYPE_X86_CPU,\
         .property = "vmx",\
@@ -630,7 +650,7 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_2_0 \
-    PC_COMPAT_2_1 \
+    PC_CPU_MODEL_IDS("2.0.0") \
     {\
         .driver   = "virtio-scsi-pci",\
         .property = "any_layout",\
@@ -690,7 +710,7 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_1_7 \
-    PC_COMPAT_2_0 \
+    PC_CPU_MODEL_IDS("1.7.0") \
     {\
         .driver   = TYPE_USB_DEVICE,\
         .property = "msos-desc",\
@@ -708,7 +728,7 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_1_6 \
-    PC_COMPAT_1_7 \
+    PC_CPU_MODEL_IDS("1.6.0") \
     {\
         .driver   = "e1000",\
         .property = "mitigation",\
@@ -732,7 +752,7 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_1_5 \
-    PC_COMPAT_1_6 \
+    PC_CPU_MODEL_IDS("1.5.0") \
     {\
         .driver   = "Conroe-" TYPE_X86_CPU,\
         .property = "model",\
@@ -776,7 +796,7 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     },
 
 #define PC_COMPAT_1_4 \
-    PC_COMPAT_1_5 \
+    PC_CPU_MODEL_IDS("1.4.0") \
     {\
         .driver   = "scsi-hd",\
         .property = "discard_granularity",\
