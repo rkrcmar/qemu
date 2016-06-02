@@ -1160,6 +1160,7 @@ struct X86CPU {
     bool migratable;
     bool host_features;
     int64_t apic_id;
+    int64_t numa_node;
 
     /* if true the CPUID code directly forward host cache leaves to the guest */
     bool cache_info_passthrough;
