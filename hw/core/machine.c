@@ -357,6 +357,20 @@ static bool machine_get_enforce_config_section(Object *obj, Error **errp)
     return ms->enforce_config_section;
 }
 
+static bool machine_get_cpu_hotplug(Object *obj, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+
+    return ms->cpu_hotplug;
+}
+
+static void machine_set_cpu_hotplug(Object *obj, bool value, Error **errp)
+{
+    MachineState *ms = MACHINE(obj);
+
+    ms->cpu_hotplug = value;
+}
+
 static int error_on_sysbus_device(SysBusDevice *sbdev, void *opaque)
 {
     error_report("Option '-device %s' cannot be handled by this machine",
@@ -532,6 +546,12 @@ static void machine_initfn(Object *obj)
                              machine_set_enforce_config_section, NULL);
     object_property_set_description(obj, "enforce-config-section",
                                     "Set on to enforce configuration section migration",
+                                    NULL);
+    object_property_add_bool(obj, "cpu-hotplug",
+                             machine_get_cpu_hotplug,
+                             machine_set_cpu_hotplug, NULL);
+    object_property_set_description(obj, "cpu-hotplug",
+                                   "Set on to enable CPU hotplug",
                                     NULL);
 
     /* Register notifier when init is done for sysbus sanity checks */

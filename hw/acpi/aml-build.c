@@ -406,6 +406,15 @@ Aml *aml_return(Aml *val)
     return var;
 }
 
+/* ACPI 1.0b: 16.2.6.3 Debug Objects Encoding: DebugObj */
+Aml *aml_debug(void)
+{
+    Aml *var = aml_alloc();
+    build_append_byte(var->buf, 0x5B); /* ExtOpPrefix */
+    build_append_byte(var->buf, 0x31); /* DebugOp */
+    return var;
+}
+
 /*
  * ACPI 1.0b: 16.2.3 Data Objects Encoding:
  * encodes: ByteConst, WordConst, DWordConst, QWordConst, ZeroOp, OneOp
@@ -1404,6 +1413,14 @@ Aml *aml_unicode(const char *str)
         i++;
     } while (i <= strlen(str));
 
+    return var;
+}
+
+/* ACPI 1.0b: 16.2.5.4 Type 2 Opcodes Encoding: DefRefOf */
+Aml *aml_refof(Aml *arg)
+{
+    Aml *var = aml_opcode(0x71 /* RefOfOp */);
+    aml_append(var, arg);
     return var;
 }
 

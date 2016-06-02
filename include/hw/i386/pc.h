@@ -17,6 +17,7 @@
 #include "hw/compat.h"
 #include "hw/mem/pc-dimm.h"
 #include "hw/mem/nvdimm.h"
+#include "hw/acpi/acpi_dev_interface.h"
 
 #define HPET_INTCAP "hpet-intcap"
 
@@ -279,7 +280,8 @@ int cmos_get_fd_drive_type(FloppyDriveType fd0);
 
 I2CBus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
                       qemu_irq sci_irq, qemu_irq smi_irq,
-                      int smm_enabled, DeviceState **piix4_pm);
+                      int smm_enabled, DeviceState **piix4_pm,
+                      bool cpuhp_enabled);
 void piix4_smbus_register_device(SMBusDevice *dev, uint8_t addr);
 
 /* hpet.c */
@@ -349,6 +351,10 @@ void pc_system_firmware_init(MemoryRegion *rom_memory,
 /* pvpanic.c */
 uint16_t pvpanic_port(void);
 
+/* acpi-build.c */
+void pc_madt_cpu_entry(AcpiDeviceIf *adev, int uid,
+                       CPUArchIdList *apic_ids, GArray *entry);
+
 /* e820 types */
 #define E820_RAM        1
 #define E820_RESERVED   2
@@ -360,7 +366,11 @@ int e820_add_entry(uint64_t, uint64_t, uint32_t);
 int e820_get_num_entries(void);
 bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
 
+#define PC_COMPAT_2_6 \
+    HW_COMPAT_2_6
+
 #define PC_COMPAT_2_5 \
+    PC_COMPAT_2_6 \
     HW_COMPAT_2_5
 
 /* Helper for setting model-id for CPU models that changed model-id

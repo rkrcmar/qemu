@@ -464,7 +464,6 @@ static GArray *load_expected_aml(test_data *data)
 {
     int i;
     AcpiSdtTable *sdt;
-    gchar *aml_file = NULL;
     GError *error = NULL;
     gboolean ret;
 
@@ -472,7 +471,9 @@ static GArray *load_expected_aml(test_data *data)
     for (i = 0; i < data->tables->len; ++i) {
         AcpiSdtTable exp_sdt;
         uint32_t signature;
+        gchar *aml_file = NULL;
         const char *ext = data->variant ? data->variant : "";
+        int j;
 
         sdt = &g_array_index(data->tables, AcpiSdtTable, i);
 
@@ -481,16 +482,23 @@ static GArray *load_expected_aml(test_data *data)
 
         signature = cpu_to_le32(sdt->header.signature);
 
-try_again:
-        aml_file = g_strdup_printf("%s/%s/%.4s%s", data_dir, data->machine,
-                                   (gchar *)&signature, ext);
-        if (data->variant && !g_file_test(aml_file, G_FILE_TEST_EXISTS)) {
+        for (j = 2; j; j -= data->variant ? 1 : 2) {
             g_free(aml_file);
+            aml_file = g_strdup_printf("%s/%s/%.4s%s", data_dir, data->machine,
+                                       (gchar *)&signature, ext);
+            if (g_file_test(aml_file, G_FILE_TEST_EXISTS)) {
+                exp_sdt.aml_file = aml_file;
+                break;
+            }
+            if (getenv("V")) {
+                fprintf(stderr, "\nLooking for expected file '%s'\n", aml_file);
+            }
             ext = "";
-            goto try_again;
         }
-        exp_sdt.aml_file = aml_file;
-        g_assert(g_file_test(aml_file, G_FILE_TEST_EXISTS));
+        g_assert(exp_sdt.aml_file);
+        if (getenv("V")) {
+            fprintf(stderr, "\nUsing expected file '%s'\n", aml_file);
+        }
         ret = g_file_get_contents(aml_file, &exp_sdt.aml,
                                   &exp_sdt.aml_len, &error);
         g_assert(ret);
@@ -781,6 +789,45 @@ static void test_acpi_q35_tcg_bridge(void)
     free_test_data(&data);
 }
 
+static void test_acpi_piix4_tcg_cpuhp_legacy(void)
+{
+    test_data data;
+
+    memset(&data, 0, sizeof(data));
+    data.machine = MACHINE_PC;
+    data.variant = ".cphp_legacy";
+    test_acpi_one("-machine pc-i440fx-2.6,accel=tcg", &data);
+    free_test_data(&data);
+}
+
+static void test_acpi_piix4_tcg_cphp(void)
+{
+    test_data data;
+
+    memset(&data, 0, sizeof(data));
+    data.machine = MACHINE_PC;
+    data.variant = ".cphp";
+    test_acpi_one("-machine accel=tcg,cpu-hotplug=on"
+                  " -smp 2,cores=3,sockets=2,maxcpus=6"
+                  " -numa node,cpus=0-2 -numa node,cpus=3-5",
+                  &data);
+    free_test_data(&data);
+}
+
+static void test_acpi_q35_tcg_cphp(void)
+{
+    test_data data;
+
+    memset(&data, 0, sizeof(data));
+    data.machine = MACHINE_Q35;
+    data.variant = ".cphp";
+    test_acpi_one("-machine q35,accel=tcg,cpu-hotplug=on"
+                  " -smp 2,cores=3,sockets=2,maxcpus=6"
+                  " -numa node,cpus=0-2 -numa node,cpus=3-5",
+                  &data);
+    free_test_data(&data);
+}
+
 int main(int argc, char *argv[])
 {
     const char *arch = qtest_get_arch();
@@ -797,6 +844,10 @@ int main(int argc, char *argv[])
         qtest_add_func("acpi/piix4/tcg/bridge", test_acpi_piix4_tcg_bridge);
         qtest_add_func("acpi/q35/tcg", test_acpi_q35_tcg);
         qtest_add_func("acpi/q35/tcg/bridge", test_acpi_q35_tcg_bridge);
+        qtest_add_func("acpi/piix4/tcg/cpuhp", test_acpi_piix4_tcg_cphp);
+        qtest_add_func("acpi/q35/tcg/cpuhp", test_acpi_q35_tcg_cphp);
+        qtest_add_func("acpi/piix4/tcg/cpuhp/legacy",
+                       test_acpi_piix4_tcg_cpuhp_legacy);
     }
     ret = g_test_run();
     boot_sector_cleanup(disk);

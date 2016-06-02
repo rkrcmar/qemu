@@ -155,6 +155,7 @@ struct MachineState {
     bool iommu_intr;
     bool suppress_vmdesc;
     bool enforce_config_section;
+    bool cpu_hotplug;
     bool enable_graphics;
 
     ram_addr_t ram_size;

@@ -1813,6 +1813,44 @@ static void x86_cpuid_set_apic_id(Object *obj, Visitor *v, const char *name,
     cpu->apic_id = value;
 }
 
+static void x86_cpu_get_numa_node(Object *obj, Visitor *v, const char *name,
+                                  void *opaque, Error **errp)
+{
+    X86CPU *cpu = X86_CPU(obj);
+    int64_t value = cpu->numa_node;
+
+    if (value == -1) {
+        error_setg(errp, "Attempt to get not initialized property '%s' on '%s'",
+                   name, object_get_typename(obj));
+        return;
+    }
+
+    visit_type_int(v, name, &value, errp);
+}
+
+static void x86_cpu_set_numa_node(Object *obj, Visitor *v, const char *name,
+                                  void *opaque, Error **errp)
+{
+    X86CPU *cpu = X86_CPU(obj);
+    DeviceState *dev = DEVICE(obj);
+    Error *error = NULL;
+    int64_t value;
+
+    if (dev->realized) {
+        error_setg(errp, "Attempt to set property '%s' on '%s' after "
+                   "it was realized", name, object_get_typename(obj));
+        return;
+    }
+
+    visit_type_int(v, name, &value, &error);
+    if (error) {
+        error_propagate(errp, error);
+        return;
+    }
+    cpu->numa_node = value;
+}
+
+
 /* Generic getter for "feature-words" and "filtered-features" properties */
 static void x86_cpu_get_feature_words(Object *obj, Visitor *v,
                                       const char *name, void *opaque,
@@ -2809,7 +2847,7 @@ static void x86_cpu_apic_create(X86CPU *cpu, Error **errp)
 
     object_property_add_child(OBJECT(cpu), "apic",
                               OBJECT(cpu->apic_state), NULL);
-    qdev_prop_set_uint8(cpu->apic_state, "id", cpu->apic_id);
+    qdev_prop_set_uint32(cpu->apic_state, "id", cpu->apic_id);
     /* TODO: convert to link<> */
     apic = APIC_COMMON(cpu->apic_state);
     apic->cpu = cpu;
@@ -3124,6 +3162,10 @@ static void x86_cpu_initfn(Object *obj)
     object_property_add(obj, "filtered-features", "X86CPUFeatureWordInfo",
                         x86_cpu_get_feature_words,
                         NULL, NULL, (void *)cpu->filtered_features, NULL);
+    cpu->numa_node = -1;
+    object_property_add(obj, "node", "int",
+                        x86_cpu_get_numa_node,
+                        x86_cpu_set_numa_node, NULL, NULL, NULL);
 
     cpu->hyperv_spinlock_attempts = HYPERV_SPINLOCK_NEVER_RETRY;
 
