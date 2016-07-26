@@ -53,6 +53,7 @@ extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
 extern bool kvm_direct_msi_allowed;
 extern bool kvm_ioeventfd_any_length_allowed;
+extern bool kvm_x2apic_32bit_ids;
 extern bool kvm_x2apic_broadcast_quirk;
 
 #if defined CONFIG_KVM || !defined NEED_CPU_H
@@ -175,6 +176,14 @@ extern bool kvm_x2apic_broadcast_quirk;
  * Returns: true if KVM doesn't interpret destination 0xff as x2APIC broadcast
  */
 #define kvm_x2apic_broadcast_quirk_disabled() (!kvm_x2apic_broadcast_quirk)
+
+/**
+ * kvm_x2apic_use_32bit_ids
+ * Returns: true if KVM uses address_hi in msi routes for upper 24 bits of
+ * destination ID and expects the APIC ID register during GET/SET LAPIC ioctls
+ * in hardware compatible format.
+ */
+#define kvm_x2apic_32bit_ids_enabled() (kvm_x2apic_32bit_ids)
 
 #else
 #define kvm_enabled()           (0)
@@ -355,6 +364,7 @@ int kvm_arch_init_vcpu(CPUState *cpu);
 
 bool kvm_vcpu_id_is_valid(int vcpu_id);
 
+bool kvm_use_x2apic_32bit_ids(void);
 bool kvm_disable_x2apic_broadcast_quirk(void);
 
 /* Returns VCPU ID to be used on KVM_CREATE_VCPU ioctl() */

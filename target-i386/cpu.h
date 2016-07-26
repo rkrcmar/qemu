@@ -1618,6 +1618,8 @@ const char *get_register_name_32(unsigned int reg);
 
 void enable_compat_apic_id_mode(void);
 
+uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index);
+
 #define APIC_DEFAULT_ADDRESS 0xfee00000
 #define APIC_SPACE_SIZE      0x100000
 

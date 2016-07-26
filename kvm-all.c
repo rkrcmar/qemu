@@ -119,6 +119,7 @@ bool kvm_readonly_mem_allowed;
 bool kvm_vm_attributes_allowed;
 bool kvm_direct_msi_allowed;
 bool kvm_ioeventfd_any_length_allowed;
+bool kvm_x2apic_32bit_ids;
 bool kvm_x2apic_broadcast_quirk = true;
 
 static const KVMCapabilityInfo kvm_required_capabilites[] = {
@@ -1556,6 +1557,15 @@ static bool kvm_x2apic_api_set_flags(uint64_t flags)
     KVMState *s = KVM_STATE(current_machine->accelerator);
 
     return !kvm_vm_enable_cap(s, KVM_CAP_X2APIC_API, 0, flags);
+}
+
+bool kvm_use_x2apic_32bit_ids(void)
+{
+    if (kvm_x2apic_api_set_flags(KVM_X2APIC_API_USE_32BIT_IDS)) {
+        kvm_x2apic_32bit_ids = true;
+    }
+
+    return kvm_x2apic_32bit_ids;
 }
 
 bool kvm_disable_x2apic_broadcast_quirk(void)

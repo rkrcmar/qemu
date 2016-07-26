@@ -679,7 +679,7 @@ void enable_compat_apic_id_mode(void)
  * no concept of "CPU index", and the NUMA tables on fw_cfg need the APIC ID of
  * all CPUs up to max_cpus.
  */
-static uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index)
+uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index)
 {
     uint32_t correct_id;
     static bool warned;

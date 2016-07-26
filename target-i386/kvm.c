@@ -1211,6 +1211,15 @@ int kvm_arch_init(MachineState *ms, KVMState *s)
         smram_machine_done.notify = register_smram_listener;
         qemu_add_machine_init_done_notifier(&smram_machine_done);
     }
+
+    if (x86_cpu_apic_id_from_index(max_cpus - 1) > 255 &&
+        (!kvm_use_x2apic_32bit_ids() ||
+         !kvm_disable_x2apic_broadcast_quirk())) {
+        fprintf(stderr, "highest configured APIC ID is over 255, but KVM does not "
+                        "have extensions to support that\n");
+        return -EINVAL;
+    }
+
     return 0;
 }
 
