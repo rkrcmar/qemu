@@ -53,6 +53,7 @@ extern bool kvm_gsi_direct_mapping;
 extern bool kvm_readonly_mem_allowed;
 extern bool kvm_direct_msi_allowed;
 extern bool kvm_ioeventfd_any_length_allowed;
+extern bool kvm_x2apic_broadcast_quirk;
 
 #if defined CONFIG_KVM || !defined NEED_CPU_H
 #define kvm_enabled()           (kvm_allowed)
@@ -168,6 +169,12 @@ extern bool kvm_ioeventfd_any_length_allowed;
  * Returns: true if KVM allows any length io eventfd.
  */
 #define kvm_ioeventfd_any_length_enabled() (kvm_ioeventfd_any_length_allowed)
+
+/**
+ * kvm_x2apic_broadcast_quirk_disabled:
+ * Returns: true if KVM doesn't interpret destination 0xff as x2APIC broadcast
+ */
+#define kvm_x2apic_broadcast_quirk_disabled() (!kvm_x2apic_broadcast_quirk)
 
 #else
 #define kvm_enabled()           (0)
@@ -347,6 +354,8 @@ int kvm_arch_init(MachineState *ms, KVMState *s);
 int kvm_arch_init_vcpu(CPUState *cpu);
 
 bool kvm_vcpu_id_is_valid(int vcpu_id);
+
+bool kvm_disable_x2apic_broadcast_quirk(void);
 
 /* Returns VCPU ID to be used on KVM_CREATE_VCPU ioctl() */
 unsigned long kvm_arch_vcpu_id(CPUState *cpu);
