@@ -2364,7 +2364,10 @@ static void vtd_init(IntelIOMMUState *s)
     s->ecap = VTD_ECAP_QI | VTD_ECAP_IRO;
 
     if (x86_iommu->intr_supported) {
-        s->ecap |= VTD_ECAP_IR | VTD_ECAP_EIM | VTD_ECAP_MHMV;
+        s->ecap |= VTD_ECAP_IR | VTD_ECAP_MHMV;
+        if (kvm_x2apic_broadcast_quirk_disabled()) {
+            s->ecap |= VTD_ECAP_EIM;
+        }
     }
 
     vtd_reset_context_cache(s);
@@ -2462,6 +2465,10 @@ static void vtd_realize(DeviceState *dev, Error **errp)
                                      g_free, g_free);
     s->vtd_as_by_busptr = g_hash_table_new_full(vtd_uint64_hash, vtd_uint64_equal,
                                               g_free, g_free);
+
+    /* IOMMU is unmigratable so we unconditionally use optional KVM features */
+    kvm_disable_x2apic_broadcast_quirk();
+
     vtd_init(s);
     sysbus_mmio_map(SYS_BUS_DEVICE(s), 0, Q35_HOST_BRIDGE_IOMMU_ADDR);
     pci_setup_iommu(bus, vtd_host_dma_iommu, dev);
